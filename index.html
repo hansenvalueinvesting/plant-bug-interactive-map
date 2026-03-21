@@ -1,0 +1,895 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>EWA · Insect–Plant Interactions</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+  :root {
+    --bg: #f6f5f1;
+    --surface: #ffffff;
+    --surface2: #f0efe9;
+    --border: #e2e0d8;
+    --border-strong: #c8c6bc;
+    --text: #1a1917;
+    --text-2: #5a5850;
+    --text-3: #9a9890;
+    --accent: #2d6a4f;
+    --accent-light: #e8f4ee;
+    --accent2: #b5451b;
+    --accent2-light: #fdf0eb;
+    --mono: 'DM Mono', monospace;
+    --sans: 'DM Sans', sans-serif;
+    --radius: 8px;
+    --radius-lg: 14px;
+    /* activity colors */
+    --feeding: #c1440e;
+    --resting: #2d6a4f;
+    --moving: #1d5fa0;
+    --unknown: #8a8880;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1.5;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ── Header ── */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 24px;
+    height: 52px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    gap: 16px;
+  }
+  .wordmark {
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    color: var(--text);
+    white-space: nowrap;
+  }
+  .wordmark span { color: var(--accent); }
+
+  .upload-zone {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 14px;
+    border: 1px dashed var(--border-strong);
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+    font-size: 13px;
+    color: var(--text-2);
+    white-space: nowrap;
+  }
+  .upload-zone:hover { border-color: var(--accent); background: var(--accent-light); color: var(--accent); }
+  .upload-zone.has-data { border-style: solid; border-color: var(--accent); background: var(--accent-light); color: var(--accent); }
+  .upload-zone svg { flex-shrink: 0; }
+  #file-input { display: none; }
+
+  .stats-pill {
+    display: flex;
+    gap: 20px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-3);
+  }
+  .stats-pill b { color: var(--text-2); font-weight: 500; }
+
+  /* ── Tabs ── */
+  .tab-bar {
+    display: flex;
+    gap: 2px;
+    padding: 0 24px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .tab {
+    padding: 10px 18px;
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--text-3);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    transition: color 0.15s, border-color 0.15s;
+    user-select: none;
+  }
+  .tab:hover { color: var(--text-2); }
+  .tab.active { color: var(--text); border-bottom-color: var(--accent); font-weight: 500; }
+
+  /* ── Main layout ── */
+  .main {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+  .panel { display: none; flex: 1; overflow: hidden; }
+  .panel.active { display: flex; }
+
+  /* ── Sidebar ── */
+  .sidebar {
+    width: 220px;
+    flex-shrink: 0;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+  }
+  .sidebar-section {
+    padding: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .sidebar-section:last-child { border-bottom: none; }
+  .sidebar-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-3);
+    margin-bottom: 10px;
+  }
+
+  /* Legend items */
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+    font-size: 12.5px;
+    color: var(--text-2);
+    cursor: pointer;
+    padding: 3px 5px;
+    border-radius: 4px;
+    transition: background 0.1s;
+  }
+  .legend-item:hover { background: var(--surface2); }
+  .legend-item.dimmed { opacity: 0.4; }
+  .legend-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .legend-rect {
+    width: 12px; height: 9px;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+
+  /* Node size guide */
+  .size-guide {
+    display: flex;
+    align-items: flex-end;
+    gap: 10px;
+    margin-top: 6px;
+  }
+  .size-bubble {
+    background: var(--border-strong);
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .size-label { font-size: 11px; color: var(--text-3); font-family: var(--mono); }
+
+  /* Filter checkboxes */
+  .filter-group { display: flex; flex-direction: column; gap: 4px; }
+  .filter-check {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12.5px;
+    color: var(--text-2);
+    cursor: pointer;
+    padding: 2px 0;
+  }
+  .filter-check input { accent-color: var(--accent); cursor: pointer; }
+
+  /* ── Canvas area ── */
+  .canvas-wrap {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    background: var(--bg);
+  }
+  #graph-svg { width: 100%; height: 100%; }
+
+  /* ── Tooltip ── */
+  .tooltip {
+    position: absolute;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 10px 14px;
+    font-size: 12.5px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.1s;
+    max-width: 240px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+    z-index: 100;
+  }
+  .tooltip.visible { opacity: 1; }
+  .tooltip-title { font-weight: 500; font-size: 13px; margin-bottom: 4px; color: var(--text); }
+  .tooltip-row { color: var(--text-2); margin-bottom: 2px; }
+  .tooltip-row b { color: var(--text); font-weight: 500; }
+
+  /* ── Empty state ── */
+  .empty-state {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    color: var(--text-3);
+    pointer-events: none;
+  }
+  .empty-state svg { opacity: 0.3; }
+  .empty-state p { font-size: 13px; font-family: var(--mono); letter-spacing: 0.03em; }
+
+  /* ── Map ── */
+  #map { width: 100%; height: 100%; }
+  .map-panel { flex: 1; overflow: hidden; }
+
+  /* ── Detail panel ── */
+  .detail-bar {
+    height: 80px;
+    flex-shrink: 0;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    padding: 0 20px;
+    display: flex;
+    align-items: center;
+    gap: 32px;
+    overflow-x: auto;
+  }
+  .detail-bar.hidden { display: none; }
+  .detail-stat { flex-shrink: 0; }
+  .detail-stat-label { font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-3); margin-bottom: 3px; }
+  .detail-stat-value { font-size: 15px; font-weight: 500; color: var(--text); }
+  .detail-divider { width: 1px; height: 40px; background: var(--border); flex-shrink: 0; }
+
+  /* node/link styles set in JS */
+  .node-insect { cursor: pointer; }
+  .node-plant { cursor: pointer; }
+  .node-label { font-family: var(--mono); font-size: 11px; fill: var(--text-2); pointer-events: none; }
+
+  /* map popup override */
+  .leaflet-popup-content-wrapper {
+    border-radius: var(--radius) !important;
+    font-family: var(--sans) !important;
+    font-size: 13px !important;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.1) !important;
+    border: 1px solid var(--border) !important;
+  }
+  .leaflet-popup-content { margin: 12px 16px !important; }
+  .popup-title { font-weight: 500; margin-bottom: 6px; }
+  .popup-row { color: #666; margin-bottom: 3px; }
+  .popup-activity { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 500; margin-top: 4px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wordmark">EWA · <span>insect–plant</span> · explorer</div>
+
+  <div class="stats-pill" id="header-stats" style="display:none">
+    <span><b id="stat-obs">0</b> obs</span>
+    <span><b id="stat-taxa">0</b> taxa</span>
+    <span><b id="stat-plants">0</b> plants</span>
+  </div>
+
+  <label class="upload-zone" id="upload-label" for="file-input">
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+      <path d="M8 2v9M4 5l4-4 4 4M2 12h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <span id="upload-text">Upload spreadsheet</span>
+  </label>
+  <input type="file" id="file-input" accept=".xlsx,.xls,.csv"/>
+</header>
+
+<div class="tab-bar">
+  <div class="tab active" data-tab="graph">Interaction map</div>
+  <div class="tab" data-tab="geo">Geographic map</div>
+</div>
+
+<div class="main">
+
+  <!-- ── GRAPH PANEL ── -->
+  <div class="panel active" id="panel-graph" style="flex-direction:column">
+    <div style="display:flex;flex:1;overflow:hidden">
+      <!-- Sidebar -->
+      <div class="sidebar">
+        <div class="sidebar-section">
+          <div class="sidebar-label">Activity type</div>
+          <div class="legend-item" data-activity="Feeding">
+            <div class="legend-dot" style="background:var(--feeding)"></div>Feeding
+          </div>
+          <div class="legend-item" data-activity="Resting">
+            <div class="legend-dot" style="background:var(--resting)"></div>Resting
+          </div>
+          <div class="legend-item" data-activity="Moving">
+            <div class="legend-dot" style="background:var(--moving)"></div>Moving
+          </div>
+          <div class="legend-item" data-activity="-">
+            <div class="legend-dot" style="background:var(--unknown)"></div>Unknown
+          </div>
+        </div>
+
+        <div class="sidebar-section">
+          <div class="sidebar-label">Node type</div>
+          <div class="legend-item" style="cursor:default">
+            <div class="legend-dot" style="background:#1a1917;border:2px solid #1a1917"></div>Insect taxon
+          </div>
+          <div class="legend-item" style="cursor:default">
+            <div class="legend-rect" style="background:#e8f4ee;border:1.5px solid var(--accent)"></div>Host plant
+          </div>
+          <div class="sidebar-label" style="margin-top:12px">Node size = observations</div>
+          <div class="size-guide">
+            <div>
+              <div class="size-bubble" style="width:10px;height:10px;margin:0 auto 2px"></div>
+              <div class="size-label">1</div>
+            </div>
+            <div>
+              <div class="size-bubble" style="width:16px;height:16px;margin:0 auto 2px"></div>
+              <div class="size-label">5</div>
+            </div>
+            <div>
+              <div class="size-bubble" style="width:24px;height:24px;margin:0 auto 2px"></div>
+              <div class="size-label">10+</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="sidebar-section">
+          <div class="sidebar-label">Filter: arthropod group</div>
+          <div class="filter-group" id="group-filters"></div>
+        </div>
+
+        <div class="sidebar-section">
+          <div class="sidebar-label">Filter: activity</div>
+          <div class="filter-group" id="activity-filters"></div>
+        </div>
+
+        <div class="sidebar-section" style="margin-top:auto">
+          <button id="reset-btn" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:var(--radius);background:transparent;cursor:pointer;font-family:var(--mono);font-size:12px;color:var(--text-2);transition:all 0.15s" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='transparent'">
+            Reset view
+          </button>
+        </div>
+      </div>
+
+      <!-- Graph canvas -->
+      <div class="canvas-wrap" id="graph-wrap">
+        <div class="empty-state" id="empty-graph">
+          <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+            <circle cx="12" cy="24" r="6" stroke="#1a1917" stroke-width="1.5"/>
+            <circle cx="36" cy="12" r="6" stroke="#1a1917" stroke-width="1.5"/>
+            <circle cx="36" cy="36" r="6" stroke="#1a1917" stroke-width="1.5"/>
+            <line x1="18" y1="24" x2="30" y2="15" stroke="#1a1917" stroke-width="1"/>
+            <line x1="18" y1="24" x2="30" y2="33" stroke="#1a1917" stroke-width="1"/>
+          </svg>
+          <p>Upload a spreadsheet to begin</p>
+        </div>
+        <svg id="graph-svg"></svg>
+        <div class="tooltip" id="tooltip"></div>
+      </div>
+    </div>
+
+    <!-- Detail bar -->
+    <div class="detail-bar hidden" id="detail-bar">
+      <div class="detail-stat">
+        <div class="detail-stat-label">Selected</div>
+        <div class="detail-stat-value" id="detail-name">—</div>
+      </div>
+      <div class="detail-divider"></div>
+      <div class="detail-stat">
+        <div class="detail-stat-label">Observations</div>
+        <div class="detail-stat-value" id="detail-obs">—</div>
+      </div>
+      <div class="detail-divider"></div>
+      <div class="detail-stat">
+        <div class="detail-stat-label">Connections</div>
+        <div class="detail-stat-value" id="detail-conn">—</div>
+      </div>
+      <div class="detail-divider"></div>
+      <div class="detail-stat">
+        <div class="detail-stat-label">Activity breakdown</div>
+        <div class="detail-stat-value" id="detail-activity">—</div>
+      </div>
+      <div class="detail-divider"></div>
+      <div class="detail-stat">
+        <div class="detail-stat-label">Date range</div>
+        <div class="detail-stat-value" id="detail-dates">—</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── GEO PANEL ── -->
+  <div class="panel" id="panel-geo" style="flex-direction:column">
+    <div class="map-panel" style="flex:1;position:relative">
+      <div class="empty-state" id="empty-map">
+        <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+          <circle cx="24" cy="22" r="8" stroke="#1a1917" stroke-width="1.5"/>
+          <path d="M24 30c0 0-12 8-12 16h24c0-8-12-16-12-16Z" stroke="#1a1917" stroke-width="1.5" stroke-linejoin="round"/>
+        </svg>
+        <p>Upload a spreadsheet to see locations</p>
+      </div>
+      <div id="map"></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════
+// DATA & STATE
+// ═══════════════════════════════════════════════════
+let allData = [];
+let activeGroups = new Set();
+let activeActivities = new Set(['Feeding','Resting','Moving','-']);
+let selectedNode = null;
+let simulation = null;
+let leafletMap = null;
+let mapMarkers = [];
+
+const COL = {
+  url:      'Observation URL',
+  date:     'Observation Date',
+  lat:      'Latitude',
+  lon:      'Longitude',
+  plant:    '🌿 Host plant species',
+  insect:   '🆔 Arthropod taxon',
+  group:    '🪲 Arthropod group',
+  activity: '💫 Activity',
+  stage:    '🐛 Developmental stage',
+  qty:      '🧮 Quantity',
+  phenology:'🌱 Host plant phenology',
+};
+
+const ACTIVITY_COLOR = {
+  'Feeding': '#c1440e',
+  'Resting': '#2d6a4f',
+  'Moving':  '#1d5fa0',
+  '-':       '#8a8880',
+};
+const ACTIVITY_BG = {
+  'Feeding': '#fdf0eb',
+  'Resting': '#e8f4ee',
+  'Moving':  '#e8f0fb',
+  '-':       '#f2f1ed',
+};
+
+// ═══════════════════════════════════════════════════
+// FILE UPLOAD
+// ═══════════════════════════════════════════════════
+document.getElementById('file-input').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const wb = XLSX.read(ev.target.result, {type:'binary', cellDates:true});
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const raw = XLSX.utils.sheet_to_json(ws, {defval:'-'});
+    processData(raw);
+    document.getElementById('upload-label').classList.add('has-data');
+    document.getElementById('upload-text').textContent = file.name;
+    e.target.value = '';
+  };
+  reader.readAsBinaryString(file);
+});
+
+function processData(raw) {
+  allData = raw.map(r => ({
+    url:       r[COL.url] || '-',
+    date:      r[COL.date] ? new Date(r[COL.date]) : null,
+    lat:       parseFloat(r[COL.lat]) || null,
+    lon:       parseFloat(r[COL.lon]) || null,
+    plant:     clean(r[COL.plant]),
+    insect:    clean(r[COL.insect]),
+    group:     clean(r[COL.group]),
+    activity:  clean(r[COL.activity]),
+    stage:     clean(r[COL.stage]),
+    qty:       parseInt(r[COL.qty]) || 1,
+    phenology: clean(r[COL.phenology]),
+  })).filter(d => d.plant !== '-' || d.insect !== '-');
+
+  // Collect unique groups/activities
+  const groups = [...new Set(allData.map(d => d.group).filter(g => g !== '-'))];
+  activeGroups = new Set(groups);
+  buildFilters(groups);
+
+  updateHeaderStats();
+  buildGraph();
+  buildMap();
+}
+
+function clean(v) {
+  if (v === null || v === undefined) return '-';
+  const s = String(v).trim();
+  return s === '' || s === 'NaN' ? '-' : s;
+}
+
+// ═══════════════════════════════════════════════════
+// FILTERS
+// ═══════════════════════════════════════════════════
+function buildFilters(groups) {
+  const gWrap = document.getElementById('group-filters');
+  gWrap.innerHTML = '';
+  groups.forEach(g => {
+    const label = document.createElement('label');
+    label.className = 'filter-check';
+    label.innerHTML = `<input type="checkbox" checked data-group="${g}"/> ${g}`;
+    label.querySelector('input').addEventListener('change', function() {
+      this.checked ? activeGroups.add(g) : activeGroups.delete(g);
+      buildGraph();
+    });
+    gWrap.appendChild(label);
+  });
+
+  const aWrap = document.getElementById('activity-filters');
+  aWrap.innerHTML = '';
+  ['Feeding','Resting','Moving','-'].forEach(a => {
+    const label = document.createElement('label');
+    label.className = 'filter-check';
+    label.innerHTML = `<input type="checkbox" checked data-activity="${a}"/> ${a === '-' ? 'Unknown' : a}`;
+    label.querySelector('input').addEventListener('change', function() {
+      this.checked ? activeActivities.add(a) : activeActivities.delete(a);
+      buildGraph();
+    });
+    aWrap.appendChild(label);
+  });
+}
+
+function filteredData() {
+  return allData.filter(d =>
+    (d.group === '-' || activeGroups.has(d.group)) &&
+    activeActivities.has(d.activity)
+  );
+}
+
+// ═══════════════════════════════════════════════════
+// HEADER STATS
+// ═══════════════════════════════════════════════════
+function updateHeaderStats() {
+  const d = allData;
+  document.getElementById('stat-obs').textContent = d.length;
+  document.getElementById('stat-taxa').textContent = new Set(d.map(x=>x.insect).filter(x=>x!=='-')).size;
+  document.getElementById('stat-plants').textContent = new Set(d.map(x=>x.plant).filter(x=>x!=='-')).size;
+  document.getElementById('header-stats').style.display = 'flex';
+}
+
+// ═══════════════════════════════════════════════════
+// GRAPH
+// ═══════════════════════════════════════════════════
+function buildGraph() {
+  const data = filteredData();
+  document.getElementById('empty-graph').style.display = data.length ? 'none' : 'flex';
+  if (!data.length) return;
+
+  const svg = d3.select('#graph-svg');
+  svg.selectAll('*').remove();
+
+  const W = document.getElementById('graph-wrap').clientWidth;
+  const H = document.getElementById('graph-wrap').clientHeight;
+  svg.attr('width', W).attr('height', H);
+
+  // Build nodes + links
+  const insectMap = new Map();
+  const plantMap  = new Map();
+  const linkMap   = new Map();
+
+  data.forEach(d => {
+    const ins = d.insect !== '-' ? d.insect : (d.group !== '-' ? `[${d.group}]` : null);
+    const pln = d.plant  !== '-' ? d.plant  : null;
+    if (!ins || !pln) return;
+
+    if (!insectMap.has(ins)) insectMap.set(ins, { id: ins, type:'insect', group:d.group, count:0, activities:{} });
+    if (!plantMap.has(pln))  plantMap.set(pln,  { id: pln, type:'plant',  count:0, activities:{} });
+
+    const iNode = insectMap.get(ins);
+    const pNode = plantMap.get(pln);
+    iNode.count += d.qty;
+    pNode.count += d.qty;
+    iNode.activities[d.activity] = (iNode.activities[d.activity]||0) + d.qty;
+    pNode.activities[d.activity] = (pNode.activities[d.activity]||0) + d.qty;
+
+    const key = `${ins}|||${pln}`;
+    if (!linkMap.has(key)) linkMap.set(key, { source:ins, target:pln, count:0, activities:{} });
+    const lnk = linkMap.get(key);
+    lnk.count += d.qty;
+    lnk.activities[d.activity] = (lnk.activities[d.activity]||0) + d.qty;
+  });
+
+  const nodes = [...insectMap.values(), ...plantMap.values()];
+  const links = [...linkMap.values()];
+
+  const nodeById = new Map(nodes.map(n => [n.id, n]));
+
+  // Radius scale
+  const maxCount = d3.max(nodes, n => n.count) || 1;
+  const rScale = d3.scaleSqrt().domain([1, maxCount]).range([7, 28]);
+
+  // dominant activity color
+  function domColor(activities) {
+    let best = '-', bestV = 0;
+    Object.entries(activities).forEach(([a,v]) => { if(v>bestV){bestV=v;best=a;} });
+    return ACTIVITY_COLOR[best] || ACTIVITY_COLOR['-'];
+  }
+
+  // Zoom
+  const g = svg.append('g');
+  svg.call(d3.zoom().scaleExtent([0.2, 4]).on('zoom', e => g.attr('transform', e.transform)));
+
+  // Links
+  const link = g.append('g').selectAll('line')
+    .data(links).enter().append('line')
+    .attr('stroke', d => domColor(d.activities))
+    .attr('stroke-opacity', 0.35)
+    .attr('stroke-width', d => Math.max(1, Math.sqrt(d.count) * 1.4));
+
+  // Nodes group
+  const node = g.append('g').selectAll('g.ngrp')
+    .data(nodes).enter().append('g')
+    .attr('class','ngrp')
+    .style('cursor','pointer')
+    .call(d3.drag()
+      .on('start', dragStart)
+      .on('drag',  dragged)
+      .on('end',   dragEnd)
+    )
+    .on('click', (event, d) => { event.stopPropagation(); selectNode(d, links, nodes); })
+    .on('mouseover', (event, d) => showTooltip(event, d, links))
+    .on('mouseout',  () => hideTooltip());
+
+  // Plant = rounded rect, Insect = circle
+  node.each(function(d) {
+    const sel = d3.select(this);
+    const r = rScale(d.count);
+    if (d.type === 'plant') {
+      sel.append('rect')
+        .attr('x', -r).attr('y', -r*0.7)
+        .attr('width', r*2).attr('height', r*1.4)
+        .attr('rx', 4)
+        .attr('fill', '#e8f4ee')
+        .attr('stroke', '#2d6a4f')
+        .attr('stroke-width', 1.5);
+    } else {
+      sel.append('circle')
+        .attr('r', r)
+        .attr('fill', '#1a1917')
+        .attr('fill-opacity', 0.85);
+      // activity ring
+      sel.append('circle')
+        .attr('r', r + 3)
+        .attr('fill', 'none')
+        .attr('stroke', domColor(d.activities))
+        .attr('stroke-width', 2)
+        .attr('stroke-opacity', 0.7);
+    }
+  });
+
+  // Labels
+  node.append('text')
+    .attr('class','node-label')
+    .attr('text-anchor','middle')
+    .attr('dy', d => rScale(d.count) + 13)
+    .attr('fill', '#5a5850')
+    .attr('font-size', '11px')
+    .attr('font-family', "'DM Mono', monospace")
+    .text(d => {
+      const r = rScale(d.count);
+      const maxChars = Math.max(8, Math.floor(r * 1.8));
+      return d.id.length > maxChars ? d.id.slice(0, maxChars-1) + '…' : d.id;
+    });
+
+  // Simulation
+  if (simulation) simulation.stop();
+  simulation = d3.forceSimulation(nodes)
+    .force('link', d3.forceLink(links).id(d => d.id).distance(d => 80 + rScale(d.source.count||1) + rScale(d.target.count||1)).strength(0.6))
+    .force('charge', d3.forceManyBody().strength(-200))
+    .force('center', d3.forceCenter(W/2, H/2))
+    .force('collision', d3.forceCollide().radius(d => rScale(d.count) + 20))
+    .on('tick', () => {
+      link
+        .attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+        .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+      node.attr('transform', d => `translate(${d.x},${d.y})`);
+    });
+
+  // Click on background deselects
+  svg.on('click', () => {
+    selectedNode = null;
+    node.selectAll('rect,circle').attr('opacity', 1);
+    link.attr('stroke-opacity', 0.35);
+    document.getElementById('detail-bar').classList.add('hidden');
+  });
+
+  // Reset
+  document.getElementById('reset-btn').onclick = () => {
+    svg.transition().duration(400).call(
+      d3.zoom().transform, d3.zoomIdentity.translate(0,0).scale(1)
+    );
+  };
+
+  function dragStart(event, d) {
+    if (!event.active) simulation.alphaTarget(0.3).restart();
+    d.fx = d.x; d.fy = d.y;
+  }
+  function dragged(event, d) { d.fx = event.x; d.fy = event.y; }
+  function dragEnd(event, d) {
+    if (!event.active) simulation.alphaTarget(0);
+    d.fx = null; d.fy = null;
+  }
+
+  function selectNode(d, links, nodes) {
+    selectedNode = d.id;
+    const connLinks = links.filter(l => l.source.id === d.id || l.target.id === d.id);
+    const connIds = new Set(connLinks.flatMap(l => [l.source.id, l.target.id]));
+
+    node.selectAll('rect').attr('opacity', n => connIds.has(n.id) ? 1 : 0.15);
+    node.selectAll('circle').attr('opacity', n => connIds.has(n.id) ? 1 : 0.15);
+    link.attr('stroke-opacity', l => (l.source.id===d.id||l.target.id===d.id) ? 0.7 : 0.05);
+
+    // Detail bar
+    const actStr = Object.entries(d.activities)
+      .sort((a,b)=>b[1]-a[1])
+      .map(([a,v]) => `${a=== '-'?'Unknown':a} ${v}`)
+      .join(' · ');
+
+    const connectedData = allData.filter(row => {
+      const ins = row.insect !== '-' ? row.insect : (row.group !== '-' ? `[${row.group}]` : null);
+      const pln = row.plant !== '-' ? row.plant : null;
+      return ins === d.id || pln === d.id;
+    });
+    const dates = connectedData.map(r => r.date).filter(Boolean).sort((a,b)=>a-b);
+    const dateStr = dates.length ? `${fmtDate(dates[0])} – ${fmtDate(dates[dates.length-1])}` : '—';
+
+    document.getElementById('detail-name').textContent = d.id;
+    document.getElementById('detail-obs').textContent = d.count;
+    document.getElementById('detail-conn').textContent = connLinks.length;
+    document.getElementById('detail-activity').textContent = actStr || '—';
+    document.getElementById('detail-dates').textContent = dateStr;
+    document.getElementById('detail-bar').classList.remove('hidden');
+  }
+}
+
+// ═══════════════════════════════════════════════════
+// TOOLTIP
+// ═══════════════════════════════════════════════════
+function showTooltip(event, d, links) {
+  const tt = document.getElementById('tooltip');
+  const connLinks = links.filter(l => l.source.id === d.id || l.target.id === d.id);
+  const connNames = connLinks.map(l => l.source.id === d.id ? l.target.id : l.source.id);
+
+  const actRows = Object.entries(d.activities)
+    .sort((a,b)=>b[1]-a[1])
+    .map(([a,v]) => `<div class="tooltip-row"><b>${a==='-'?'Unknown':a}:</b> ${v} obs</div>`)
+    .join('');
+
+  tt.innerHTML = `
+    <div class="tooltip-title">${d.id}</div>
+    <div class="tooltip-row"><b>Type:</b> ${d.type === 'insect' ? 'Insect' : 'Host plant'}</div>
+    <div class="tooltip-row"><b>Total observations:</b> ${d.count}</div>
+    <div class="tooltip-row"><b>Connections:</b> ${connNames.slice(0,3).join(', ')}${connNames.length>3?'…':''}</div>
+    ${actRows}
+  `;
+  tt.classList.add('visible');
+  moveTT(event);
+}
+function moveTT(event) {
+  const tt = document.getElementById('tooltip');
+  const wrap = document.getElementById('graph-wrap');
+  const rect = wrap.getBoundingClientRect();
+  let x = event.clientX - rect.left + 14;
+  let y = event.clientY - rect.top + 14;
+  if (x + 250 > wrap.clientWidth) x -= 270;
+  if (y + 160 > wrap.clientHeight) y -= 160;
+  tt.style.left = x + 'px';
+  tt.style.top  = y + 'px';
+}
+function hideTooltip() {
+  document.getElementById('tooltip').classList.remove('visible');
+}
+
+// ═══════════════════════════════════════════════════
+// GEO MAP
+// ═══════════════════════════════════════════════════
+function buildMap() {
+  const pts = allData.filter(d => d.lat && d.lon);
+  document.getElementById('empty-map').style.display = pts.length ? 'none' : 'flex';
+  document.getElementById('map').style.display = pts.length ? 'block' : 'none';
+  if (!pts.length) return;
+
+  if (!leafletMap) {
+    leafletMap = L.map('map', { zoomControl: true });
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+      attribution: '© OpenStreetMap © CARTO',
+      maxZoom: 19
+    }).addTo(leafletMap);
+  }
+
+  // Clear existing markers
+  mapMarkers.forEach(m => m.remove());
+  mapMarkers = [];
+
+  pts.forEach(d => {
+    const color = ACTIVITY_COLOR[d.activity] || ACTIVITY_COLOR['-'];
+    const bg    = ACTIVITY_BG[d.activity]    || ACTIVITY_BG['-'];
+    const icon  = L.divIcon({
+      html: `<div style="width:12px;height:12px;background:${color};border:2px solid white;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,0.2)"></div>`,
+      className: '',
+      iconSize: [12,12],
+      iconAnchor: [6,6],
+    });
+    const marker = L.marker([d.lat, d.lon], {icon});
+    marker.bindPopup(`
+      <div class="popup-title">${d.insect !== '-' ? d.insect : d.group}</div>
+      <div class="popup-row"><b>Plant:</b> ${d.plant}</div>
+      <div class="popup-row"><b>Date:</b> ${d.date ? fmtDate(d.date) : '—'}</div>
+      <div class="popup-row"><b>Qty:</b> ${d.qty} &nbsp; <b>Stage:</b> ${d.stage}</div>
+      <div><span class="popup-activity" style="background:${bg};color:${color}">${d.activity === '-' ? 'Unknown' : d.activity}</span></div>
+    `);
+    marker.addTo(leafletMap);
+    mapMarkers.push(marker);
+  });
+
+  const lats = pts.map(d=>d.lat), lons = pts.map(d=>d.lon);
+  leafletMap.fitBounds([
+    [Math.min(...lats)-0.02, Math.min(...lons)-0.02],
+    [Math.max(...lats)+0.02, Math.max(...lons)+0.02]
+  ]);
+}
+
+// ═══════════════════════════════════════════════════
+// TABS
+// ═══════════════════════════════════════════════════
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('panel-' + tab.dataset.tab).classList.add('active');
+    if (tab.dataset.tab === 'geo' && leafletMap) setTimeout(()=>leafletMap.invalidateSize(),50);
+    if (tab.dataset.tab === 'graph' && allData.length) buildGraph();
+  });
+});
+
+// ═══════════════════════════════════════════════════
+// UTILS
+// ═══════════════════════════════════════════════════
+function fmtDate(d) {
+  if (!d) return '—';
+  return d.toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'});
+}
+
+// Rebuild graph on resize
+let resizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => { if (allData.length) buildGraph(); }, 200);
+});
+</script>
+</body>
+</html>
