@@ -296,6 +296,103 @@
   .act-pill.feeding { background: var(--red-light);   color: var(--red); }
   .act-pill.resting { background: var(--blue-light);  color: var(--blue); }
   .act-pill.moving  { background: var(--accent2-light); color: var(--accent2); }
+
+  /* ── Mobile sidebar toggle button ─────────────────────────────────── */
+  .sidebar-toggle {
+    display: none;
+    position: absolute; top: 10px; left: 10px; z-index: 20;
+    width: 36px; height: 36px; border-radius: var(--radius);
+    border: 1px solid var(--border); background: var(--surface);
+    box-shadow: var(--shadow); cursor: pointer;
+    align-items: center; justify-content: center;
+    color: var(--text-secondary);
+    transition: all 0.15s;
+  }
+  .sidebar-toggle:hover { border-color: var(--accent); color: var(--accent); }
+  .sidebar-toggle svg { pointer-events: none; }
+
+  /* ── Mobile overlay backdrop for sidebar ──────────────────────────── */
+  .sidebar-backdrop {
+    display: none;
+    position: fixed; inset: 0; z-index: 29;
+    background: rgba(0,0,0,0.25);
+  }
+  .sidebar-backdrop.active { display: block; }
+
+  /* ── Responsive: tablets & small desktops ─────────────────────────── */
+  @media (max-width: 900px) {
+    .stat-chips { gap: 4px; }
+    .chip { padding: 3px 7px; font-size: 10px; }
+  }
+
+  /* ── Responsive: mobile ───────────────────────────────────────────── */
+  @media (max-width: 640px) {
+    header {
+      padding: 0 12px; height: 48px; gap: 8px;
+      flex-wrap: wrap;
+    }
+    .logo { font-size: 11px; gap: 6px; }
+    .logo-mark { width: 20px; height: 20px; }
+    .logo-mark svg { width: 11px; height: 11px; }
+    .logo-text { display: none; }
+
+    .upload-btn { padding: 6px 10px; font-size: 12px; gap: 5px; }
+    .upload-btn .upload-label { display: none; }
+
+    .stat-chips { gap: 3px; margin-left: auto; flex-wrap: nowrap; overflow-x: auto; }
+    .chip { padding: 3px 6px; font-size: 9.5px; white-space: nowrap; }
+
+    .tabs { padding: 0 8px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .tab { padding: 9px 12px; font-size: 12px; white-space: nowrap; flex-shrink: 0; }
+
+    .content { position: relative; }
+
+    /* Sidebar becomes an overlay on mobile */
+    .sidebar {
+      position: fixed; top: 0; left: 0; bottom: 0;
+      width: 260px; z-index: 30;
+      transform: translateX(-100%);
+      transition: transform 0.25s ease;
+      box-shadow: none;
+    }
+    .sidebar.open {
+      transform: translateX(0);
+      box-shadow: var(--shadow-lg);
+    }
+
+    /* Show the toggle button */
+    .sidebar-toggle { display: flex; }
+
+    /* Detail card: full-width at bottom */
+    #detail-card {
+      left: 8px; right: 8px; bottom: 8px;
+      width: auto; max-width: 100%;
+    }
+
+    /* Data table toolbar */
+    .table-toolbar { padding: 8px 12px; }
+    .table-search { width: 100%; min-width: 0; flex: 1; font-size: 14px; padding: 8px 12px; }
+
+    .data-table td { padding: 7px 10px; font-size: 12px; max-width: 150px; }
+    .data-table th { padding: 8px 10px; font-size: 10px; }
+
+    /* Tooltip: hide on mobile (touch doesn't support hover well) */
+    #tooltip { display: none !important; }
+
+    /* Drop overlay */
+    #drop-overlay { margin: 6px; font-size: 13px; }
+  }
+
+  /* ── Very small phones ────────────────────────────────────────────── */
+  @media (max-width: 380px) {
+    header { height: 44px; padding: 0 8px; }
+    .logo { font-size: 10px; }
+    .chip { font-size: 9px; padding: 2px 5px; }
+    .tab { padding: 8px 10px; font-size: 11px; }
+    .upload-btn { padding: 5px 8px; font-size: 11px; }
+    #detail-card { padding: 12px; }
+    .detail-metric-val { font-size: 16px; }
+  }
 </style>
 </head>
 <body>
@@ -305,11 +402,11 @@
       <div class="logo-mark">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.22" y1="4.22" x2="7.05" y2="7.05"/><line x1="16.95" y1="16.95" x2="19.78" y2="19.78"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/></svg>
       </div>
-      Insect–Plant Explorer
+      <span class="logo-text">Insect–Plant Explorer</span>
     </div>
     <label class="upload-btn" for="file-input">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-      Upload spreadsheet
+      <span class="upload-label">Upload spreadsheet</span>
     </label>
     <input type="file" id="file-input" accept=".xlsx,.xls,.csv">
     <div class="stat-chips" id="stat-chips" style="display:none">
@@ -329,7 +426,7 @@
   <div class="content">
     <!-- Graph panel -->
     <div class="panel active" id="panel-graph">
-      <div class="sidebar">
+      <div class="sidebar" id="sidebar-graph">
         <div class="sidebar-section">
           <div class="sidebar-label">Filters</div>
           <div class="filter-group">
@@ -369,6 +466,9 @@
         </div>
       </div>
       <div id="graph-container">
+        <button class="sidebar-toggle" id="toggle-graph" aria-label="Toggle filters">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="14" y2="12"/><line x1="4" y1="18" x2="18" y2="18"/><circle cx="18" cy="6" r="2" fill="currentColor"/><circle cx="10" cy="12" r="2" fill="currentColor"/><circle cx="14" cy="18" r="2" fill="currentColor"/></svg>
+        </button>
         <svg id="graph-svg"></svg>
         <div id="empty-state">
           <div class="empty-icon">🔬</div>
@@ -403,7 +503,7 @@
 
     <!-- Map panel -->
     <div class="panel" id="panel-map">
-      <div class="sidebar">
+      <div class="sidebar" id="sidebar-map">
         <div class="sidebar-section">
           <div class="sidebar-label">Filters</div>
           <div class="filter-group">
@@ -429,7 +529,12 @@
           <div class="legend-note" style="margin-top:6px;line-height:1.6">Click any marker to see observation details.</div>
         </div>
       </div>
-      <div id="map"></div>
+      <div id="map-container" style="flex:1;position:relative;">
+        <button class="sidebar-toggle" id="toggle-map" aria-label="Toggle filters">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="14" y2="12"/><line x1="4" y1="18" x2="18" y2="18"/><circle cx="18" cy="6" r="2" fill="currentColor"/><circle cx="10" cy="12" r="2" fill="currentColor"/><circle cx="14" cy="18" r="2" fill="currentColor"/></svg>
+        </button>
+        <div id="map" style="position:absolute;inset:0;"></div>
+      </div>
     </div>
 
     <!-- Data panel -->
@@ -458,12 +563,15 @@
   Drop spreadsheet to load
 </div>
 
+<!-- Backdrop for mobile sidebar overlay -->
+<div class="sidebar-backdrop" id="sidebar-backdrop"></div>
+
 <script>
 let allObs = [];
 let rawSheetData = [];
 let map = null;
-let mapLayer = null;        // replaces mapMarkers array — single FeatureGroup
-let mapNeedsRebuild = false; // tracks if map data is stale while tab is hidden
+let mapLayer = null;
+let mapNeedsRebuild = false;
 let simulation = null;
 let currentLinks = [];
 let tableSort = { col: null, dir: 1 };
@@ -471,6 +579,41 @@ let tableSort = { col: null, dir: 1 };
 const ACT_COLORS = { feeding: '#c0392b', resting: '#1a4a6b', moving: '#b07d1a' };
 
 const DEFAULT_URL = 'https://raw.githubusercontent.com/hansenvalueinvesting/plant-bug-interactive-map/main/example-sheet-formatting.xlsx';
+
+/* ── Mobile sidebar toggle logic ────────────────────────────────────────────── */
+function setupSidebarToggle(toggleId, sidebarId) {
+  const toggle = document.getElementById(toggleId);
+  const sidebar = document.getElementById(sidebarId);
+  const backdrop = document.getElementById('sidebar-backdrop');
+  if (!toggle || !sidebar) return;
+
+  function closeSidebar() {
+    sidebar.classList.remove('open');
+    backdrop.classList.remove('active');
+  }
+
+  toggle.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const isOpen = sidebar.classList.toggle('open');
+    backdrop.classList.toggle('active', isOpen);
+  });
+
+  backdrop.addEventListener('click', closeSidebar);
+
+  // Close sidebar when a filter value changes (on mobile)
+  sidebar.querySelectorAll('select').forEach(sel => {
+    sel.addEventListener('change', () => {
+      if (window.innerWidth <= 640) {
+        setTimeout(closeSidebar, 150);
+      }
+    });
+  });
+}
+
+setupSidebarToggle('toggle-graph', 'sidebar-graph');
+setupSidebarToggle('toggle-map', 'sidebar-map');
+
+/* ── Data loading ───────────────────────────────────────────────────────────── */
 
 window.addEventListener('DOMContentLoaded', () => {
   showLoading('Loading example dataset…');
@@ -604,7 +747,6 @@ function populateFilters() {
   document.getElementById(id).addEventListener('change', applyFilters);
 });
 
-// Map filters trigger a rebuild only if the map tab is currently visible
 ['fm-group','fm-activity'].forEach(id => {
   document.getElementById(id).addEventListener('change', () => {
     const mapActive = document.getElementById('panel-map').classList.contains('active');
@@ -626,7 +768,6 @@ function applyFilters() {
   const graphObs = allObs.filter(o => (!fg || o.group === fg) && (!fa || o.activity === fa) && (!fp || o.plant === fp));
   updateChips(graphObs);
   buildGraph(graphObs);
-  // Mark map as needing a rebuild; it will render when the tab is opened
   mapNeedsRebuild = true;
 }
 
@@ -679,7 +820,8 @@ function buildGraph(obs) {
   currentLinks = links;
   if (!nodes.length) return;
   const maxCount = Math.max(...nodes.map(n=>n.count), 1);
-  const rScale = d3.scaleSqrt().domain([1, maxCount]).range([9, 32]);
+  const isMobile = W < 640;
+  const rScale = d3.scaleSqrt().domain([1, maxCount]).range(isMobile ? [6, 22] : [9, 32]);
   const lScale = d3.scaleLinear().domain([1, Math.max(...links.map(l=>l.count),1)]).range([1.5, 7]);
   const g = svg.append('g');
   svg.call(d3.zoom().scaleExtent([0.25, 5]).on('zoom', e => g.attr('transform', e.transform)));
@@ -718,17 +860,18 @@ function buildGraph(obs) {
       .attr('fill','#7a4f1d').attr('fill-opacity',0.88)
       .attr('stroke','#4a2f0d').attr('stroke-width',0.5);
   });
+  const labelSize = isMobile ? '8px' : '10px';
   nodeSel.append('text')
-    .text(d => d.id.length > 20 ? d.id.slice(0,18)+'…' : d.id)
+    .text(d => d.id.length > (isMobile ? 14 : 20) ? d.id.slice(0, isMobile ? 12 : 18)+'…' : d.id)
     .attr('text-anchor','middle')
     .attr('dy', d => { const r = rScale(d.count); return d.type==='insect' ? r+14 : r*0.8+14; })
-    .attr('fill','var(--text-primary)').attr('font-size','10px').attr('font-family','DM Mono, monospace')
+    .attr('fill','var(--text-primary)').attr('font-size', labelSize).attr('font-family','DM Mono, monospace')
     .attr('pointer-events','none');
   simulation = d3.forceSimulation(nodes)
-    .force('link', d3.forceLink(links).id(d=>d.id).distance(130).strength(0.5))
-    .force('charge', d3.forceManyBody().strength(-350))
+    .force('link', d3.forceLink(links).id(d=>d.id).distance(isMobile ? 80 : 130).strength(0.5))
+    .force('charge', d3.forceManyBody().strength(isMobile ? -200 : -350))
     .force('center', d3.forceCenter(W/2, H/2))
-    .force('collision', d3.forceCollide().radius(d=>rScale(d.count)+20))
+    .force('collision', d3.forceCollide().radius(d=>rScale(d.count)+(isMobile?10:20)))
     .on('tick', () => {
       linkSel.attr('x1',d=>d.source.x).attr('y1',d=>d.source.y).attr('x2',d=>d.target.x).attr('y2',d=>d.target.y);
       nodeSel.attr('transform',d=>`translate(${d.x},${d.y})`);
@@ -790,8 +933,6 @@ function moveTooltip(event) {
 }
 function hideTooltip() { document.getElementById('tooltip').classList.remove('visible'); }
 
-// ── Map: split init from render ──────────────────────────────────────────────
-
 function initMap() {
   map = L.map('map', { zoomControl: true });
   L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
@@ -802,13 +943,9 @@ function initMap() {
 }
 
 function buildMap(obs) {
-  // Remove existing layer in one shot
   if (mapLayer) { map.removeLayer(mapLayer); mapLayer = null; }
-
   const valid = obs.filter(o => o.lat && o.lon);
   if (!valid.length) return;
-
-  // Build all markers before touching the map DOM
   const markers = valid.map(o => {
     const color = ACT_COLORS[(o.activity || '').toLowerCase()] || '#6b6a62';
     const marker = L.circleMarker([o.lat, o.lon], {
@@ -833,14 +970,10 @@ function buildMap(obs) {
     );
     return marker;
   });
-
-  // Add everything in one operation, then fit bounds from the group
   mapLayer = L.featureGroup(markers).addTo(map);
   map.fitBounds(mapLayer.getBounds().pad(0.05));
   mapNeedsRebuild = false;
 }
-
-// ── Tab switching: lazy map init ─────────────────────────────────────────────
 
 document.querySelectorAll('.tab').forEach(tab => {
   tab.addEventListener('click', () => {
@@ -850,7 +983,6 @@ document.querySelectorAll('.tab').forEach(tab => {
     document.getElementById(`panel-${tab.dataset.tab}`).classList.add('active');
 
     if (tab.dataset.tab === 'map') {
-      // Wait one frame so the panel has real pixel dimensions before Leaflet touches it
       requestAnimationFrame(() => {
         if (!map) {
           initMap();
@@ -867,8 +999,6 @@ document.querySelectorAll('.tab').forEach(tab => {
     }
   });
 });
-
-// ── Data table ───────────────────────────────────────────────────────────────
 
 function buildDataTable() {
   if (!rawSheetData || rawSheetData.length < 2) return;
