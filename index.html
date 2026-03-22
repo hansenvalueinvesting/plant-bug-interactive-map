@@ -27,6 +27,10 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<!-- Marker clustering for dense point sets -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.css"/>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.Default.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.min.js"></script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -298,6 +302,26 @@
   .act-pill.feeding { background: var(--red-light);   color: var(--red); }
   .act-pill.resting { background: var(--blue-light);  color: var(--blue); }
   .act-pill.moving  { background: var(--accent2-light); color: var(--accent2); }
+
+  /* Cluster styling to match app palette */
+  .marker-cluster-small,
+  .marker-cluster-medium,
+  .marker-cluster-large { background-clip: padding-box; border-radius: 20px; }
+  .marker-cluster-small  { background-color: rgba(45,90,27,0.18); }
+  .marker-cluster-medium { background-color: rgba(45,90,27,0.28); }
+  .marker-cluster-large  { background-color: rgba(45,90,27,0.38); }
+  .marker-cluster-small  div,
+  .marker-cluster-medium div,
+  .marker-cluster-large  div {
+    width: 30px; height: 30px; margin-left: 5px; margin-top: 5px;
+    text-align: center; border-radius: 15px; font-size: 12px;
+    font-family: var(--font-mono); color: var(--accent); font-weight: 500;
+    line-height: 30px;
+  }
+  .marker-cluster-small  div { background-color: rgba(45,90,27,0.5); }
+  .marker-cluster-medium div { background-color: rgba(45,90,27,0.6); }
+  .marker-cluster-large  div { background-color: rgba(45,90,27,0.7); color: #fff; }
+  .marker-cluster span { line-height: 30px; }
 </style>
 </head>
 <body>
@@ -456,7 +480,7 @@
 </div>
 
 <div id="drop-overlay">
-  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
   Drop spreadsheet to load
 </div>
 
@@ -464,10 +488,29 @@
 let allObs = [];
 let rawSheetData = [];
 let map = null;
-let mapMarkers = [];
+// FIX 1: Use a single MarkerClusterGroup instead of a plain array of markers.
+// This lets us call clusterLayer.clearLayers() (one DOM op) and
+// clusterLayer.addLayers(array) (one batched op) rather than
+// adding/removing markers one-by-one.
+let clusterLayer = null;
 let simulation = null;
 let currentLinks = [];
 let tableSort = { col: null, dir: 1 };
+
+// FIX 2: Pre-build icon objects keyed by activity colour so we're not
+// calling L.divIcon() inside the per-marker loop on every rebuild.
+const ACT_COLORS = { feeding: '#c0392b', resting: '#1a4a6b', moving: '#b07d1a', unknown: '#6b6a62' };
+const ICON_CACHE = {};
+function getIcon(activityKey) {
+  if (ICON_CACHE[activityKey]) return ICON_CACHE[activityKey];
+  const color = ACT_COLORS[activityKey] || ACT_COLORS.unknown;
+  ICON_CACHE[activityKey] = L.divIcon({
+    className: '',
+    html: `<div style="width:11px;height:11px;border-radius:50%;background:${color};border:2px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,0.28)"></div>`,
+    iconSize: [11, 11], iconAnchor: [5.5, 5.5]
+  });
+  return ICON_CACHE[activityKey];
+}
 
 const DEFAULT_URL = 'https://raw.githubusercontent.com/hansenvalueinvesting/plant-bug-interactive-map/main/example-sheet-formatting.xlsx';
 
@@ -776,42 +819,77 @@ function moveTooltip(event) {
 }
 function hideTooltip() { document.getElementById('tooltip').classList.remove('visible'); }
 
+// ── Optimized buildMap ───────────────────────────────────────────────────────
 function buildMap(obs) {
+  // FIX 3: Initialise the map once and never tear it down.
+  // Recreating L.map() forces a full tile reload on every filter change.
   if (!map) {
     map = L.map('map', { zoomControl: true });
     L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
       attribution: '© <a href="https://openstreetmap.org">OpenStreetMap</a> © <a href="https://carto.com">CARTO</a>',
       maxZoom: 19
     }).addTo(map);
+
+    // FIX 4: Create the cluster group once; reuse it every rebuild.
+    clusterLayer = L.markerClusterGroup({
+      maxClusterRadius: 50,       // tighter clusters look cleaner
+      chunkedLoading: true,       // yields to UI thread while adding markers
+      chunkInterval: 100,         // ms between chunks
+      chunkDelay: 0,
+      spiderfyOnMaxZoom: true,
+      showCoverageOnHover: false,
+    });
+    map.addLayer(clusterLayer);
   }
-  mapMarkers.forEach(m => m.remove());
-  mapMarkers = [];
+
+  // FIX 5: One clearLayers() call instead of N individual marker.remove() calls.
+  clusterLayer.clearLayers();
+
   const valid = obs.filter(o => o.lat && o.lon);
   if (!valid.length) return;
-  const actColors = { feeding:'#c0392b', resting:'#1a4a6b', moving:'#b07d1a' };
-  valid.forEach(o => {
-    const color = actColors[(o.activity||'').toLowerCase()] || '#6b6a62';
-    const icon = L.divIcon({
-      className: '',
-      html: `<div style="width:11px;height:11px;border-radius:50%;background:${color};border:2px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,0.28)"></div>`,
-      iconSize: [11,11], iconAnchor: [5.5,5.5]
-    });
-    const actBadge = o.activity ? `<span class="popup-act" style="background:${color}18;color:${color}">${o.activity}</span>` : '';
-    const m = L.marker([o.lat, o.lon], { icon }).addTo(map);
-    m.bindPopup(`
-      <div class="popup-inner">
+
+  // FIX 6: Build all markers into an array first, then add them in one
+  // batched addLayers() call. Leaflet can optimise the DOM work internally.
+  const markers = valid.map(o => {
+    const actKey = (o.activity || '').toLowerCase();
+    const color  = ACT_COLORS[actKey] || ACT_COLORS.unknown;
+    const actBadge = o.activity
+      ? `<span class="popup-act" style="background:${color}18;color:${color}">${o.activity}</span>`
+      : '';
+    const m = L.marker([o.lat, o.lon], { icon: getIcon(actKey) });
+    // FIX 7: Use bindPopup lazily (content only rendered when popup opens).
+    m.bindPopup(() => {
+      const div = document.createElement('div');
+      div.className = 'popup-inner';
+      div.innerHTML = `
         <div class="popup-title">${o.taxon || o.group || 'Unknown arthropod'}</div>
         <div class="popup-row">Plant: ${o.plant || '—'}</div>
         <div class="popup-row">Quantity: ${o.qty}</div>
         ${o.stage ? `<div class="popup-row">Stage: ${o.stage}</div>` : ''}
-        ${o.date  ? `<div class="popup-row">Date: ${o.date}</div>` : ''}
+        ${o.date  ? `<div class="popup-row">Date: ${o.date}</div>`  : ''}
         ${actBadge}
-      </div>
-    `, { maxWidth: 220 });
-    mapMarkers.push(m);
+      `;
+      return div;
+    }, { maxWidth: 220 });
+    return m;
   });
-  const lats = valid.map(o=>o.lat), lons = valid.map(o=>o.lon);
-  map.fitBounds([[Math.min(...lats)-0.015, Math.min(...lons)-0.015],[Math.max(...lats)+0.015, Math.max(...lons)+0.015]], { padding:[30,30] });
+
+  clusterLayer.addLayers(markers);   // single batched DOM insertion
+
+  // FIX 8: Bounds via reduce instead of spread-into-Math.min/max,
+  // which copies the entire array into the argument list (stack pressure).
+  let minLat = Infinity, maxLat = -Infinity, minLon = Infinity, maxLon = -Infinity;
+  for (const o of valid) {
+    if (o.lat < minLat) minLat = o.lat;
+    if (o.lat > maxLat) maxLat = o.lat;
+    if (o.lon < minLon) minLon = o.lon;
+    if (o.lon > maxLon) maxLon = o.lon;
+  }
+  const pad = 0.015;
+  map.fitBounds(
+    [[minLat - pad, minLon - pad], [maxLat + pad, maxLon + pad]],
+    { padding: [30, 30], animate: false }   // animate:false = instant, no jank
+  );
 }
 
 function buildDataTable() {
@@ -845,24 +923,26 @@ function renderTableRows(rows, headers) {
   const urlCol = headers.findIndex(h => h && h.toLowerCase().includes('observation url'));
   const tbody = document.getElementById('table-body');
   tbody.innerHTML = '';
-  rows.forEach(row => {
-    const tr = document.createElement('tr');
-    row.forEach((cell, i) => {
-      const td = document.createElement('td');
+  // FIX 9: Build table HTML as a string and set innerHTML once instead of
+  // appending individual DOM nodes in a loop (avoids repeated reflows).
+  const html = rows.map(row => {
+    const cells = row.map((cell, i) => {
       const val = cell != null ? cell.toString().trim() : '';
+      let inner;
       if (i === urlCol && val && val.startsWith('http')) {
-        td.innerHTML = `<a href="${val}" target="_blank" rel="noopener">↗ view</a>`;
+        inner = `<a href="${val}" target="_blank" rel="noopener">↗ view</a>`;
       } else if (i === actCol && val && val !== '-') {
-        const cls = val.toLowerCase();
-        td.innerHTML = `<span class="act-pill ${cls}">${val}</span>`;
+        inner = `<span class="act-pill ${val.toLowerCase()}">${val}</span>`;
       } else {
-        td.textContent = val === '-' || val === '' ? '—' : val;
-        td.title = val;
+        const display = (val === '-' || val === '') ? '—' : val.replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        inner = `<td title="${val.replace(/"/g,'&quot;')}">${display}</td>`;
+        return inner; // already a full <td>
       }
-      tr.appendChild(td);
-    });
-    tbody.appendChild(tr);
-  });
+      return `<td>${inner}</td>`;
+    }).join('');
+    return `<tr>${cells}</tr>`;
+  }).join('');
+  tbody.innerHTML = html;
 }
 
 function sortTable(colIdx, headerName) {
