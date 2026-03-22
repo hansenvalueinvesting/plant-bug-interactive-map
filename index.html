@@ -12,11 +12,6 @@ const APP_KEY = “plant-bug-interactive-map”;
 
 runTransaction(ref(db, `visits/${APP_KEY}`), n => (n || 0) + 1);
 runTransaction(ref(db, `visits/total`),      n => (n || 0) + 1);
-
-window._analyticsDb = db;
-window._analyticsRef = ref;
-window._analyticsTransaction = runTransaction;
-window._analyticsAppKey = APP_KEY;
 </script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -493,7 +488,9 @@ window.addEventListener('DOMContentLoaded', () => {
       document.getElementById('empty-state').classList.add('hidden');
       hideLoading();
     })
-    .catch(() => { hideLoading(); });
+    .catch(() => {
+      hideLoading();
+    });
 });
 
 function showLoading(msg) {
@@ -570,12 +567,6 @@ function loadFile(file) {
     allObs = parseSheet(data);
     hideLoading();
     if (allObs.length === 0) { alert('No valid observations found. Check that your spreadsheet has Latitude, Longitude, and arthropod/plant columns.'); return; }
-
-    if (window._analyticsTransaction) {
-      window._analyticsTransaction(window._analyticsRef(window._analyticsDb, `visits/${window._analyticsAppKey}`), n => (n || 0) + 1);
-      window._analyticsTransaction(window._analyticsRef(window._analyticsDb, "visits/total"), n => (n || 0) + 1);
-    }
-
     populateFilters();
     applyFilters();
     buildDataTable();
