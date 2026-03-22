@@ -27,10 +27,6 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-<!-- Marker clustering for dense point sets -->
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.css"/>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.Default.css"/>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.min.js"></script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -246,7 +242,6 @@
   .sidebar::-webkit-scrollbar-track { background: transparent; }
   .sidebar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 
-  /* ── Loading overlay ── */
   #loading-overlay {
     display: none; position: fixed; inset: 0; z-index: 200;
     background: rgba(247,246,242,0.92);
@@ -261,7 +256,6 @@
   @keyframes spin { to { transform: rotate(360deg); } }
   .loading-text { font-family: var(--font-mono); font-size: 12px; color: var(--text-secondary); letter-spacing: 0.04em; }
 
-  /* ── Data table ── */
   #panel-data { flex-direction: column; background: var(--bg); }
   .table-toolbar {
     padding: 10px 20px; background: var(--surface);
@@ -302,26 +296,6 @@
   .act-pill.feeding { background: var(--red-light);   color: var(--red); }
   .act-pill.resting { background: var(--blue-light);  color: var(--blue); }
   .act-pill.moving  { background: var(--accent2-light); color: var(--accent2); }
-
-  /* Cluster styling to match app palette */
-  .marker-cluster-small,
-  .marker-cluster-medium,
-  .marker-cluster-large { background-clip: padding-box; border-radius: 20px; }
-  .marker-cluster-small  { background-color: rgba(45,90,27,0.18); }
-  .marker-cluster-medium { background-color: rgba(45,90,27,0.28); }
-  .marker-cluster-large  { background-color: rgba(45,90,27,0.38); }
-  .marker-cluster-small  div,
-  .marker-cluster-medium div,
-  .marker-cluster-large  div {
-    width: 30px; height: 30px; margin-left: 5px; margin-top: 5px;
-    text-align: center; border-radius: 15px; font-size: 12px;
-    font-family: var(--font-mono); color: var(--accent); font-weight: 500;
-    line-height: 30px;
-  }
-  .marker-cluster-small  div { background-color: rgba(45,90,27,0.5); }
-  .marker-cluster-medium div { background-color: rgba(45,90,27,0.6); }
-  .marker-cluster-large  div { background-color: rgba(45,90,27,0.7); color: #fff; }
-  .marker-cluster span { line-height: 30px; }
 </style>
 </head>
 <body>
@@ -480,7 +454,7 @@
 </div>
 
 <div id="drop-overlay">
-  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
   Drop spreadsheet to load
 </div>
 
@@ -488,29 +462,13 @@
 let allObs = [];
 let rawSheetData = [];
 let map = null;
-// FIX 1: Use a single MarkerClusterGroup instead of a plain array of markers.
-// This lets us call clusterLayer.clearLayers() (one DOM op) and
-// clusterLayer.addLayers(array) (one batched op) rather than
-// adding/removing markers one-by-one.
-let clusterLayer = null;
+let mapLayer = null;        // replaces mapMarkers array — single FeatureGroup
+let mapNeedsRebuild = false; // tracks if map data is stale while tab is hidden
 let simulation = null;
 let currentLinks = [];
 let tableSort = { col: null, dir: 1 };
 
-// FIX 2: Pre-build icon objects keyed by activity colour so we're not
-// calling L.divIcon() inside the per-marker loop on every rebuild.
-const ACT_COLORS = { feeding: '#c0392b', resting: '#1a4a6b', moving: '#b07d1a', unknown: '#6b6a62' };
-const ICON_CACHE = {};
-function getIcon(activityKey) {
-  if (ICON_CACHE[activityKey]) return ICON_CACHE[activityKey];
-  const color = ACT_COLORS[activityKey] || ACT_COLORS.unknown;
-  ICON_CACHE[activityKey] = L.divIcon({
-    className: '',
-    html: `<div style="width:11px;height:11px;border-radius:50%;background:${color};border:2px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,0.28)"></div>`,
-    iconSize: [11, 11], iconAnchor: [5.5, 5.5]
-  });
-  return ICON_CACHE[activityKey];
-}
+const ACT_COLORS = { feeding: '#c0392b', resting: '#1a4a6b', moving: '#b07d1a' };
 
 const DEFAULT_URL = 'https://raw.githubusercontent.com/hansenvalueinvesting/plant-bug-interactive-map/main/example-sheet-formatting.xlsx';
 
@@ -642,21 +600,34 @@ function populateFilters() {
   plants.forEach(p => { const o = document.createElement('option'); o.value = p; o.textContent = p; fp.appendChild(o); });
 }
 
-['f-group','f-activity','f-plant','fm-group','fm-activity'].forEach(id => {
+['f-group','f-activity','f-plant'].forEach(id => {
   document.getElementById(id).addEventListener('change', applyFilters);
+});
+
+// Map filters trigger a rebuild only if the map tab is currently visible
+['fm-group','fm-activity'].forEach(id => {
+  document.getElementById(id).addEventListener('change', () => {
+    const mapActive = document.getElementById('panel-map').classList.contains('active');
+    if (mapActive && map) {
+      const mg = document.getElementById('fm-group').value;
+      const ma = document.getElementById('fm-activity').value;
+      const mapObs = allObs.filter(o => (!mg || o.group === mg) && (!ma || o.activity === ma));
+      buildMap(mapObs);
+    } else {
+      mapNeedsRebuild = true;
+    }
+  });
 });
 
 function applyFilters() {
   const fg = document.getElementById('f-group').value;
   const fa = document.getElementById('f-activity').value;
   const fp = document.getElementById('f-plant').value;
-  const mg = document.getElementById('fm-group').value;
-  const ma = document.getElementById('fm-activity').value;
   const graphObs = allObs.filter(o => (!fg || o.group === fg) && (!fa || o.activity === fa) && (!fp || o.plant === fp));
-  const mapObs = allObs.filter(o => (!mg || o.group === mg) && (!ma || o.activity === ma));
   updateChips(graphObs);
   buildGraph(graphObs);
-  buildMap(mapObs);
+  // Mark map as needing a rebuild; it will render when the tab is opened
+  mapNeedsRebuild = true;
 }
 
 function updateChips(obs) {
@@ -819,78 +790,85 @@ function moveTooltip(event) {
 }
 function hideTooltip() { document.getElementById('tooltip').classList.remove('visible'); }
 
-// ── Optimized buildMap ───────────────────────────────────────────────────────
+// ── Map: split init from render ──────────────────────────────────────────────
+
+function initMap() {
+  map = L.map('map', { zoomControl: true });
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+    attribution: '© <a href="https://openstreetmap.org">OpenStreetMap</a> © <a href="https://carto.com">CARTO</a>',
+    maxZoom: 19,
+    keepBuffer: 4
+  }).addTo(map);
+}
+
 function buildMap(obs) {
-  // FIX 3: Initialise the map once and never tear it down.
-  // Recreating L.map() forces a full tile reload on every filter change.
-  if (!map) {
-    map = L.map('map', { zoomControl: true });
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-      attribution: '© <a href="https://openstreetmap.org">OpenStreetMap</a> © <a href="https://carto.com">CARTO</a>',
-      maxZoom: 19
-    }).addTo(map);
-
-    // FIX 4: Create the cluster group once; reuse it every rebuild.
-    clusterLayer = L.markerClusterGroup({
-      maxClusterRadius: 50,       // tighter clusters look cleaner
-      chunkedLoading: true,       // yields to UI thread while adding markers
-      chunkInterval: 100,         // ms between chunks
-      chunkDelay: 0,
-      spiderfyOnMaxZoom: true,
-      showCoverageOnHover: false,
-    });
-    map.addLayer(clusterLayer);
-  }
-
-  // FIX 5: One clearLayers() call instead of N individual marker.remove() calls.
-  clusterLayer.clearLayers();
+  // Remove existing layer in one shot
+  if (mapLayer) { map.removeLayer(mapLayer); mapLayer = null; }
 
   const valid = obs.filter(o => o.lat && o.lon);
   if (!valid.length) return;
 
-  // FIX 6: Build all markers into an array first, then add them in one
-  // batched addLayers() call. Leaflet can optimise the DOM work internally.
+  // Build all markers before touching the map DOM
   const markers = valid.map(o => {
-    const actKey = (o.activity || '').toLowerCase();
-    const color  = ACT_COLORS[actKey] || ACT_COLORS.unknown;
+    const color = ACT_COLORS[(o.activity || '').toLowerCase()] || '#6b6a62';
+    const marker = L.circleMarker([o.lat, o.lon], {
+      radius: 6,
+      fillColor: color,
+      color: '#ffffff',
+      weight: 2,
+      fillOpacity: 0.9
+    });
     const actBadge = o.activity
       ? `<span class="popup-act" style="background:${color}18;color:${color}">${o.activity}</span>`
       : '';
-    const m = L.marker([o.lat, o.lon], { icon: getIcon(actKey) });
-    // FIX 7: Use bindPopup lazily (content only rendered when popup opens).
-    m.bindPopup(() => {
-      const div = document.createElement('div');
-      div.className = 'popup-inner';
-      div.innerHTML = `
-        <div class="popup-title">${o.taxon || o.group || 'Unknown arthropod'}</div>
-        <div class="popup-row">Plant: ${o.plant || '—'}</div>
-        <div class="popup-row">Quantity: ${o.qty}</div>
-        ${o.stage ? `<div class="popup-row">Stage: ${o.stage}</div>` : ''}
-        ${o.date  ? `<div class="popup-row">Date: ${o.date}</div>`  : ''}
-        ${actBadge}
-      `;
-      return div;
-    }, { maxWidth: 220 });
-    return m;
+    marker.bindPopup(
+      '<div class="popup-inner">' +
+      `<div class="popup-title">${o.taxon || o.group || 'Unknown arthropod'}</div>` +
+      `<div class="popup-row">Plant: ${o.plant || '—'}</div>` +
+      `<div class="popup-row">Quantity: ${o.qty}</div>` +
+      (o.stage ? `<div class="popup-row">Stage: ${o.stage}</div>` : '') +
+      (o.date  ? `<div class="popup-row">Date: ${o.date}</div>`  : '') +
+      actBadge + '</div>',
+      { maxWidth: 220 }
+    );
+    return marker;
   });
 
-  clusterLayer.addLayers(markers);   // single batched DOM insertion
-
-  // FIX 8: Bounds via reduce instead of spread-into-Math.min/max,
-  // which copies the entire array into the argument list (stack pressure).
-  let minLat = Infinity, maxLat = -Infinity, minLon = Infinity, maxLon = -Infinity;
-  for (const o of valid) {
-    if (o.lat < minLat) minLat = o.lat;
-    if (o.lat > maxLat) maxLat = o.lat;
-    if (o.lon < minLon) minLon = o.lon;
-    if (o.lon > maxLon) maxLon = o.lon;
-  }
-  const pad = 0.015;
-  map.fitBounds(
-    [[minLat - pad, minLon - pad], [maxLat + pad, maxLon + pad]],
-    { padding: [30, 30], animate: false }   // animate:false = instant, no jank
-  );
+  // Add everything in one operation, then fit bounds from the group
+  mapLayer = L.featureGroup(markers).addTo(map);
+  map.fitBounds(mapLayer.getBounds().pad(0.05));
+  mapNeedsRebuild = false;
 }
+
+// ── Tab switching: lazy map init ─────────────────────────────────────────────
+
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById(`panel-${tab.dataset.tab}`).classList.add('active');
+
+    if (tab.dataset.tab === 'map') {
+      // Wait one frame so the panel has real pixel dimensions before Leaflet touches it
+      requestAnimationFrame(() => {
+        if (!map) {
+          initMap();
+        } else {
+          map.invalidateSize();
+        }
+        if (mapNeedsRebuild || !mapLayer) {
+          const mg = document.getElementById('fm-group').value;
+          const ma = document.getElementById('fm-activity').value;
+          const mapObs = allObs.filter(o => (!mg || o.group === mg) && (!ma || o.activity === ma));
+          buildMap(mapObs);
+        }
+      });
+    }
+  });
+});
+
+// ── Data table ───────────────────────────────────────────────────────────────
 
 function buildDataTable() {
   if (!rawSheetData || rawSheetData.length < 2) return;
@@ -923,26 +901,24 @@ function renderTableRows(rows, headers) {
   const urlCol = headers.findIndex(h => h && h.toLowerCase().includes('observation url'));
   const tbody = document.getElementById('table-body');
   tbody.innerHTML = '';
-  // FIX 9: Build table HTML as a string and set innerHTML once instead of
-  // appending individual DOM nodes in a loop (avoids repeated reflows).
-  const html = rows.map(row => {
-    const cells = row.map((cell, i) => {
+  rows.forEach(row => {
+    const tr = document.createElement('tr');
+    row.forEach((cell, i) => {
+      const td = document.createElement('td');
       const val = cell != null ? cell.toString().trim() : '';
-      let inner;
       if (i === urlCol && val && val.startsWith('http')) {
-        inner = `<a href="${val}" target="_blank" rel="noopener">↗ view</a>`;
+        td.innerHTML = `<a href="${val}" target="_blank" rel="noopener">↗ view</a>`;
       } else if (i === actCol && val && val !== '-') {
-        inner = `<span class="act-pill ${val.toLowerCase()}">${val}</span>`;
+        const cls = val.toLowerCase();
+        td.innerHTML = `<span class="act-pill ${cls}">${val}</span>`;
       } else {
-        const display = (val === '-' || val === '') ? '—' : val.replace(/</g,'&lt;').replace(/>/g,'&gt;');
-        inner = `<td title="${val.replace(/"/g,'&quot;')}">${display}</td>`;
-        return inner; // already a full <td>
+        td.textContent = val === '-' || val === '' ? '—' : val;
+        td.title = val;
       }
-      return `<td>${inner}</td>`;
-    }).join('');
-    return `<tr>${cells}</tr>`;
-  }).join('');
-  tbody.innerHTML = html;
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
 }
 
 function sortTable(colIdx, headerName) {
@@ -962,18 +938,6 @@ function sortTable(colIdx, headerName) {
   if (ths[colIdx]) ths[colIdx].classList.add(tableSort.dir === 1 ? 'sort-asc' : 'sort-desc');
   renderTableRows(filtered, rawSheetData[0].map(h => h ? h.toString().trim() : ''));
 }
-
-document.querySelectorAll('.tab').forEach(tab => {
-  tab.addEventListener('click', () => {
-    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
-    document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
-    tab.classList.add('active');
-    document.getElementById(`panel-${tab.dataset.tab}`).classList.add('active');
-    if (tab.dataset.tab==='map' && map) setTimeout(()=>map.invalidateSize(),50);
-  });
-});
-
-setTimeout(()=>{ if(!map && allObs.length) buildMap([]); }, 200);
 </script>
 </body>
 </html>
