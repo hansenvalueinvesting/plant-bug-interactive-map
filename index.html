@@ -1,19 +1,26 @@
 <!DOCTYPE html>
+
 <html lang="en">
 <head>
  <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
   import { getDatabase, ref, runTransaction } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
-  const app = initializeApp({ databaseURL: "https://github-analytics-9bd0b-default-rtdb.firebaseio.com" }, "analytics");
-  const db = getDatabase(app);
-  const APP_KEY = "plant-bug-interactive-map"; 
+const app = initializeApp({ databaseURL: “https://github-analytics-9bd0b-default-rtdb.firebaseio.com” }, “analytics”);
+const db = getDatabase(app);
+const APP_KEY = “plant-bug-interactive-map”;
 
-  runTransaction(ref(db, `visits/${APP_KEY}`), n => (n || 0) + 1);
-  runTransaction(ref(db, `visits/total`),      n => (n || 0) + 1);
+runTransaction(ref(db, `visits/${APP_KEY}`), n => (n || 0) + 1);
+runTransaction(ref(db, `visits/total`),      n => (n || 0) + 1);
+
+window._analyticsDb = db;
+window._analyticsRef = ref;
+window._analyticsTransaction = runTransaction;
+window._analyticsAppKey = APP_KEY;
 </script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
 <title>Insect–Plant Interaction Explorer</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -25,275 +32,274 @@
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-  :root {
-    --bg: #f7f6f2;
-    --surface: #ffffff;
-    --border: #e2e0d8;
-    --border-soft: #ece9e0;
-    --text-primary: #1a1a18;
-    --text-secondary: #6b6a62;
-    --text-muted: #9e9c92;
-    --accent: #2d5a1b;
-    --accent-light: #e8f0e3;
-    --accent2: #7a4f1d;
-    --accent2-light: #f5ede2;
-    --red: #c0392b;
-    --red-light: #fbeaea;
-    --blue: #1a4a6b;
-    --blue-light: #e3eef6;
-    --node-insect: #2d5a1b;
-    --node-plant: #7a4f1d;
-    --feeding: #c0392b;
-    --resting: #1a4a6b;
-    --moving: #b07d1a;
-    --font-sans: 'DM Sans', sans-serif;
-    --font-mono: 'DM Mono', monospace;
-    --radius: 6px;
-    --radius-lg: 10px;
-    --shadow: 0 1px 4px rgba(0,0,0,0.08);
-    --shadow-lg: 0 4px 20px rgba(0,0,0,0.10);
-  }
+:root {
+–bg: #f7f6f2;
+–surface: #ffffff;
+–border: #e2e0d8;
+–border-soft: #ece9e0;
+–text-primary: #1a1a18;
+–text-secondary: #6b6a62;
+–text-muted: #9e9c92;
+–accent: #2d5a1b;
+–accent-light: #e8f0e3;
+–accent2: #7a4f1d;
+–accent2-light: #f5ede2;
+–red: #c0392b;
+–red-light: #fbeaea;
+–blue: #1a4a6b;
+–blue-light: #e3eef6;
+–node-insect: #2d5a1b;
+–node-plant: #7a4f1d;
+–feeding: #c0392b;
+–resting: #1a4a6b;
+–moving: #b07d1a;
+–font-sans: ‘DM Sans’, sans-serif;
+–font-mono: ‘DM Mono’, monospace;
+–radius: 6px;
+–radius-lg: 10px;
+–shadow: 0 1px 4px rgba(0,0,0,0.08);
+–shadow-lg: 0 4px 20px rgba(0,0,0,0.10);
+}
 
-  html, body { height: 100%; background: var(--bg); font-family: var(--font-sans); color: var(--text-primary); font-size: 14px; }
+html, body { height: 100%; background: var(–bg); font-family: var(–font-sans); color: var(–text-primary); font-size: 14px; }
 
-  #app { display: flex; flex-direction: column; height: 100vh; }
+#app { display: flex; flex-direction: column; height: 100vh; }
 
-  header {
-    display: flex; align-items: center; gap: 12px;
-    padding: 0 20px; height: 52px;
-    background: var(--surface); border-bottom: 1px solid var(--border);
-    flex-shrink: 0;
-  }
-  .logo {
-    font-family: var(--font-mono); font-size: 12px; font-weight: 500;
-    letter-spacing: 0.05em; color: var(--text-primary);
-    display: flex; align-items: center; gap: 8px; white-space: nowrap;
-  }
-  .logo-mark {
-    width: 22px; height: 22px; border-radius: 5px;
-    background: var(--accent); display: flex; align-items: center; justify-content: center;
-  }
-  .logo-mark svg { color: white; }
+header {
+display: flex; align-items: center; gap: 12px;
+padding: 0 20px; height: 52px;
+background: var(–surface); border-bottom: 1px solid var(–border);
+flex-shrink: 0;
+}
+.logo {
+font-family: var(–font-mono); font-size: 12px; font-weight: 500;
+letter-spacing: 0.05em; color: var(–text-primary);
+display: flex; align-items: center; gap: 8px; white-space: nowrap;
+}
+.logo-mark {
+width: 22px; height: 22px; border-radius: 5px;
+background: var(–accent); display: flex; align-items: center; justify-content: center;
+}
+.logo-mark svg { color: white; }
 
-  .upload-btn {
-    display: flex; align-items: center; gap: 7px;
-    padding: 7px 14px; border-radius: var(--radius);
-    border: 1px solid var(--border); background: var(--surface);
-    font-family: var(--font-sans); font-size: 13px; color: var(--text-secondary);
-    cursor: pointer; transition: all 0.15s; white-space: nowrap;
-  }
-  .upload-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-light); }
-  #file-input { display: none; }
+.upload-btn {
+display: flex; align-items: center; gap: 7px;
+padding: 7px 14px; border-radius: var(–radius);
+border: 1px solid var(–border); background: var(–surface);
+font-family: var(–font-sans); font-size: 13px; color: var(–text-secondary);
+cursor: pointer; transition: all 0.15s; white-space: nowrap;
+}
+.upload-btn:hover { border-color: var(–accent); color: var(–accent); background: var(–accent-light); }
+#file-input { display: none; }
 
-  .stat-chips { display: flex; gap: 6px; margin-left: auto; }
-  .chip {
-    font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.03em;
-    padding: 4px 10px; border-radius: 20px;
-    background: var(--bg); border: 1px solid var(--border);
-    color: var(--text-secondary);
-  }
-  .chip span { color: var(--text-primary); font-weight: 500; }
+.stat-chips { display: flex; gap: 6px; margin-left: auto; }
+.chip {
+font-family: var(–font-mono); font-size: 11px; letter-spacing: 0.03em;
+padding: 4px 10px; border-radius: 20px;
+background: var(–bg); border: 1px solid var(–border);
+color: var(–text-secondary);
+}
+.chip span { color: var(–text-primary); font-weight: 500; }
 
-  .tabs {
-    display: flex; gap: 0; padding: 0 20px;
-    background: var(--surface); border-bottom: 1px solid var(--border);
-    flex-shrink: 0;
-  }
-  .tab {
-    padding: 10px 18px; font-size: 13px; color: var(--text-muted);
-    border-bottom: 2px solid transparent; cursor: pointer;
-    transition: all 0.15s; user-select: none;
-  }
-  .tab:hover { color: var(--text-primary); }
-  .tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 500; }
+.tabs {
+display: flex; gap: 0; padding: 0 20px;
+background: var(–surface); border-bottom: 1px solid var(–border);
+flex-shrink: 0;
+}
+.tab {
+padding: 10px 18px; font-size: 13px; color: var(–text-muted);
+border-bottom: 2px solid transparent; cursor: pointer;
+transition: all 0.15s; user-select: none;
+}
+.tab:hover { color: var(–text-primary); }
+.tab.active { color: var(–accent); border-bottom-color: var(–accent); font-weight: 500; }
 
-  .content { flex: 1; display: flex; overflow: hidden; }
-  .panel { display: none; flex: 1; overflow: hidden; }
-  .panel.active { display: flex; }
+.content { flex: 1; display: flex; overflow: hidden; }
+.panel { display: none; flex: 1; overflow: hidden; }
+.panel.active { display: flex; }
 
-  .sidebar {
-    width: 220px; flex-shrink: 0;
-    background: var(--surface); border-right: 1px solid var(--border);
-    display: flex; flex-direction: column; overflow-y: auto;
-  }
-  .sidebar-section { padding: 14px 16px; border-bottom: 1px solid var(--border-soft); }
-  .sidebar-label {
-    font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em;
-    text-transform: uppercase; color: var(--text-muted); margin-bottom: 10px;
-  }
-  .filter-group { margin-bottom: 10px; }
-  .filter-group:last-child { margin-bottom: 0; }
-  .filter-group label { font-size: 12px; color: var(--text-secondary); display: block; margin-bottom: 4px; }
-  .filter-group select {
-    width: 100%; padding: 6px 8px; border: 1px solid var(--border);
-    border-radius: var(--radius); background: var(--bg);
-    font-family: var(--font-sans); font-size: 12px; color: var(--text-primary);
-    appearance: none; cursor: pointer; outline: none;
-  }
-  .filter-group select:focus { border-color: var(--accent); }
+.sidebar {
+width: 220px; flex-shrink: 0;
+background: var(–surface); border-right: 1px solid var(–border);
+display: flex; flex-direction: column; overflow-y: auto;
+}
+.sidebar-section { padding: 14px 16px; border-bottom: 1px solid var(–border-soft); }
+.sidebar-label {
+font-family: var(–font-mono); font-size: 10px; letter-spacing: 0.08em;
+text-transform: uppercase; color: var(–text-muted); margin-bottom: 10px;
+}
+.filter-group { margin-bottom: 10px; }
+.filter-group:last-child { margin-bottom: 0; }
+.filter-group label { font-size: 12px; color: var(–text-secondary); display: block; margin-bottom: 4px; }
+.filter-group select {
+width: 100%; padding: 6px 8px; border: 1px solid var(–border);
+border-radius: var(–radius); background: var(–bg);
+font-family: var(–font-sans); font-size: 12px; color: var(–text-primary);
+appearance: none; cursor: pointer; outline: none;
+}
+.filter-group select:focus { border-color: var(–accent); }
 
-  .legend-item { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; font-size: 12px; color: var(--text-secondary); }
-  .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
-  .legend-sq { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
-  .legend-line { width: 22px; height: 2.5px; flex-shrink: 0; border-radius: 2px; }
-  .legend-note { font-size: 11px; color: var(--text-muted); margin-top: 2px; line-height: 1.5; }
+.legend-item { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; font-size: 12px; color: var(–text-secondary); }
+.legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.legend-sq { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+.legend-line { width: 22px; height: 2.5px; flex-shrink: 0; border-radius: 2px; }
+.legend-note { font-size: 11px; color: var(–text-muted); margin-top: 2px; line-height: 1.5; }
 
-  #graph-container { flex: 1; overflow: hidden; position: relative; background: var(--bg); }
-  #graph-svg { width: 100%; height: 100%; }
+#graph-container { flex: 1; overflow: hidden; position: relative; background: var(–bg); }
+#graph-svg { width: 100%; height: 100%; }
 
-  .link { fill: none; }
-  .link.feeding { stroke: var(--feeding); }
-  .link.resting { stroke: var(--resting); }
-  .link.moving  { stroke: var(--moving); }
-  .link.mixed   { stroke: var(--text-muted); }
+.link { fill: none; }
+.link.feeding { stroke: var(–feeding); }
+.link.resting { stroke: var(–resting); }
+.link.moving  { stroke: var(–moving); }
+.link.mixed   { stroke: var(–text-muted); }
 
-  #detail-card {
-    position: absolute; bottom: 16px; right: 16px;
-    width: 272px; background: var(--surface);
-    border: 1px solid var(--border); border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-lg); padding: 16px;
-    display: none; z-index: 10;
-    animation: slideUp 0.15s ease;
-  }
-  @keyframes slideUp { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
-  #detail-card.visible { display: block; }
-  .detail-header { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 12px; }
-  .detail-icon {
-    width: 32px; height: 32px; border-radius: 7px; flex-shrink: 0;
-    display: flex; align-items: center; justify-content: center; font-size: 15px;
-  }
-  .detail-icon.insect { background: var(--accent-light); }
-  .detail-icon.plant  { background: var(--accent2-light); }
-  .detail-title { font-weight: 500; font-size: 13px; margin-bottom: 2px; line-height: 1.3; }
-  .detail-sub { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; }
-  .detail-sub.insect { color: var(--accent); }
-  .detail-sub.plant  { color: var(--accent2); }
-  .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
-  .detail-metric { background: var(--bg); border-radius: var(--radius); padding: 8px 10px; }
-  .detail-metric-val { font-size: 18px; font-weight: 500; line-height: 1; margin-bottom: 2px; }
-  .detail-metric-key { font-size: 11px; color: var(--text-muted); }
-  .detail-partners { font-size: 12px; color: var(--text-secondary); margin-bottom: 10px; line-height: 1.5; }
-  .detail-partners strong { color: var(--text-primary); font-weight: 500; }
-  .detail-acts { display: flex; gap: 5px; flex-wrap: wrap; }
-  .act-badge { font-size: 11px; padding: 2px 9px; border-radius: 20px; font-family: var(--font-mono); }
-  .act-badge.feeding { background: var(--red-light);   color: var(--red); }
-  .act-badge.resting { background: var(--blue-light);  color: var(--blue); }
-  .act-badge.moving  { background: var(--accent2-light); color: var(--accent2); }
-  .detail-close {
-    position: absolute; top: 10px; right: 10px;
-    width: 22px; height: 22px; display: flex; align-items: center; justify-content: center;
-    border-radius: 50%; border: none; background: none; cursor: pointer;
-    color: var(--text-muted); font-size: 13px;
-  }
-  .detail-close:hover { background: var(--bg); color: var(--text-primary); }
+#detail-card {
+position: absolute; bottom: 16px; right: 16px;
+width: 272px; background: var(–surface);
+border: 1px solid var(–border); border-radius: var(–radius-lg);
+box-shadow: var(–shadow-lg); padding: 16px;
+display: none; z-index: 10;
+animation: slideUp 0.15s ease;
+}
+@keyframes slideUp { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
+#detail-card.visible { display: block; }
+.detail-header { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 12px; }
+.detail-icon {
+width: 32px; height: 32px; border-radius: 7px; flex-shrink: 0;
+display: flex; align-items: center; justify-content: center; font-size: 15px;
+}
+.detail-icon.insect { background: var(–accent-light); }
+.detail-icon.plant  { background: var(–accent2-light); }
+.detail-title { font-weight: 500; font-size: 13px; margin-bottom: 2px; line-height: 1.3; }
+.detail-sub { font-family: var(–font-mono); font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; }
+.detail-sub.insect { color: var(–accent); }
+.detail-sub.plant  { color: var(–accent2); }
+.detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+.detail-metric { background: var(–bg); border-radius: var(–radius); padding: 8px 10px; }
+.detail-metric-val { font-size: 18px; font-weight: 500; line-height: 1; margin-bottom: 2px; }
+.detail-metric-key { font-size: 11px; color: var(–text-muted); }
+.detail-partners { font-size: 12px; color: var(–text-secondary); margin-bottom: 10px; line-height: 1.5; }
+.detail-partners strong { color: var(–text-primary); font-weight: 500; }
+.detail-acts { display: flex; gap: 5px; flex-wrap: wrap; }
+.act-badge { font-size: 11px; padding: 2px 9px; border-radius: 20px; font-family: var(–font-mono); }
+.act-badge.feeding { background: var(–red-light);   color: var(–red); }
+.act-badge.resting { background: var(–blue-light);  color: var(–blue); }
+.act-badge.moving  { background: var(–accent2-light); color: var(–accent2); }
+.detail-close {
+position: absolute; top: 10px; right: 10px;
+width: 22px; height: 22px; display: flex; align-items: center; justify-content: center;
+border-radius: 50%; border: none; background: none; cursor: pointer;
+color: var(–text-muted); font-size: 13px;
+}
+.detail-close:hover { background: var(–bg); color: var(–text-primary); }
 
-  #map { flex: 1; }
-  .leaflet-popup-content-wrapper {
-    font-family: var(--font-sans); border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-lg); border: 1px solid var(--border);
-    padding: 0;
-  }
-  .leaflet-popup-content { margin: 0; }
-  .popup-inner { padding: 12px 14px; }
-  .popup-title { font-weight: 500; font-size: 13px; margin-bottom: 5px; }
-  .popup-row { font-size: 12px; color: var(--text-secondary); margin-bottom: 2px; }
-  .popup-act {
-    display: inline-block; font-size: 11px; padding: 2px 8px;
-    border-radius: 20px; margin-top: 6px; font-family: var(--font-mono);
-  }
-  .leaflet-popup-tip-container { display: none; }
+#map { flex: 1; }
+.leaflet-popup-content-wrapper {
+font-family: var(–font-sans); border-radius: var(–radius-lg);
+box-shadow: var(–shadow-lg); border: 1px solid var(–border);
+padding: 0;
+}
+.leaflet-popup-content { margin: 0; }
+.popup-inner { padding: 12px 14px; }
+.popup-title { font-weight: 500; font-size: 13px; margin-bottom: 5px; }
+.popup-row { font-size: 12px; color: var(–text-secondary); margin-bottom: 2px; }
+.popup-act {
+display: inline-block; font-size: 11px; padding: 2px 8px;
+border-radius: 20px; margin-top: 6px; font-family: var(–font-mono);
+}
+.leaflet-popup-tip-container { display: none; }
 
-  #empty-state {
-    position: absolute; inset: 0; display: flex; flex-direction: column;
-    align-items: center; justify-content: center; gap: 10px;
-    pointer-events: none;
-  }
-  #empty-state.hidden { display: none; }
-  .empty-icon { font-size: 36px; opacity: 0.18; }
-  .empty-title { font-size: 14px; color: var(--text-secondary); font-weight: 500; }
-  .empty-sub { font-size: 12px; color: var(--text-muted); text-align: center; max-width: 280px; line-height: 1.6; }
+#empty-state {
+position: absolute; inset: 0; display: flex; flex-direction: column;
+align-items: center; justify-content: center; gap: 10px;
+pointer-events: none;
+}
+#empty-state.hidden { display: none; }
+.empty-icon { font-size: 36px; opacity: 0.18; }
+.empty-title { font-size: 14px; color: var(–text-secondary); font-weight: 500; }
+.empty-sub { font-size: 12px; color: var(–text-muted); text-align: center; max-width: 280px; line-height: 1.6; }
 
-  #drop-overlay {
-    display: none; position: fixed; inset: 0; z-index: 100;
-    background: rgba(247,246,242,0.94);
-    border: 2px dashed var(--accent); margin: 12px; border-radius: 12px;
-    align-items: center; justify-content: center; flex-direction: column; gap: 10px;
-    font-size: 14px; color: var(--accent); font-weight: 500; font-family: var(--font-mono);
-    letter-spacing: 0.03em;
-  }
-  #drop-overlay.active { display: flex; }
+#drop-overlay {
+display: none; position: fixed; inset: 0; z-index: 100;
+background: rgba(247,246,242,0.94);
+border: 2px dashed var(–accent); margin: 12px; border-radius: 12px;
+align-items: center; justify-content: center; flex-direction: column; gap: 10px;
+font-size: 14px; color: var(–accent); font-weight: 500; font-family: var(–font-mono);
+letter-spacing: 0.03em;
+}
+#drop-overlay.active { display: flex; }
 
-  #tooltip {
-    position: absolute; pointer-events: none; z-index: 50;
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: var(--radius); padding: 6px 10px;
-    font-size: 12px; box-shadow: var(--shadow);
-    display: none; line-height: 1.5;
-  }
-  #tooltip.visible { display: block; }
-  #tooltip strong { font-weight: 500; display: block; }
+#tooltip {
+position: absolute; pointer-events: none; z-index: 50;
+background: var(–surface); border: 1px solid var(–border);
+border-radius: var(–radius); padding: 6px 10px;
+font-size: 12px; box-shadow: var(–shadow);
+display: none; line-height: 1.5;
+}
+#tooltip.visible { display: block; }
+#tooltip strong { font-weight: 500; display: block; }
 
-  .sidebar::-webkit-scrollbar { width: 4px; }
-  .sidebar::-webkit-scrollbar-track { background: transparent; }
-  .sidebar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+.sidebar::-webkit-scrollbar { width: 4px; }
+.sidebar::-webkit-scrollbar-track { background: transparent; }
+.sidebar::-webkit-scrollbar-thumb { background: var(–border); border-radius: 2px; }
 
-  /* ── Loading overlay ── */
-  #loading-overlay {
-    display: none; position: fixed; inset: 0; z-index: 200;
-    background: rgba(247,246,242,0.92);
-    align-items: center; justify-content: center; flex-direction: column; gap: 14px;
-  }
-  #loading-overlay.active { display: flex; }
-  .spinner {
-    width: 32px; height: 32px; border: 2.5px solid var(--border);
-    border-top-color: var(--accent); border-radius: 50%;
-    animation: spin 0.7s linear infinite;
-  }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  .loading-text { font-family: var(--font-mono); font-size: 12px; color: var(--text-secondary); letter-spacing: 0.04em; }
+#loading-overlay {
+display: none; position: fixed; inset: 0; z-index: 200;
+background: rgba(247,246,242,0.92);
+align-items: center; justify-content: center; flex-direction: column; gap: 14px;
+}
+#loading-overlay.active { display: flex; }
+.spinner {
+width: 32px; height: 32px; border: 2.5px solid var(–border);
+border-top-color: var(–accent); border-radius: 50%;
+animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-text { font-family: var(–font-mono); font-size: 12px; color: var(–text-secondary); letter-spacing: 0.04em; }
 
-  /* ── Data table ── */
-  #panel-data { flex-direction: column; background: var(--bg); }
-  .table-toolbar {
-    padding: 10px 20px; background: var(--surface);
-    border-bottom: 1px solid var(--border);
-    display: flex; align-items: center; gap: 12px; flex-shrink: 0;
-  }
-  .table-search {
-    padding: 6px 12px; border: 1px solid var(--border); border-radius: var(--radius);
-    background: var(--bg); font-family: var(--font-sans); font-size: 13px;
-    color: var(--text-primary); outline: none; width: 260px;
-  }
-  .table-search:focus { border-color: var(--accent); }
-  .table-count { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); margin-left: auto; }
-  .table-wrap { flex: 1; overflow: auto; }
-  .data-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
-  .data-table thead { position: sticky; top: 0; z-index: 5; }
-  .data-table th {
-    background: var(--surface); border-bottom: 1px solid var(--border);
-    padding: 9px 14px; text-align: left; font-weight: 500; font-size: 11px;
-    font-family: var(--font-mono); letter-spacing: 0.05em; text-transform: uppercase;
-    color: var(--text-muted); white-space: nowrap; cursor: pointer; user-select: none;
-  }
-  .data-table th:hover { color: var(--text-primary); }
-  .data-table th.sort-asc::after  { content: ' ↑'; color: var(--accent); }
-  .data-table th.sort-desc::after { content: ' ↓'; color: var(--accent); }
-  .data-table td {
-    padding: 8px 14px; border-bottom: 1px solid var(--border-soft);
-    color: var(--text-primary); white-space: nowrap; max-width: 220px;
-    overflow: hidden; text-overflow: ellipsis;
-  }
-  .data-table tr:hover td { background: var(--accent-light); }
-  .data-table td a { color: var(--accent); text-decoration: none; font-size: 11px; }
-  .data-table td a:hover { text-decoration: underline; }
-  .act-pill {
-    display: inline-block; padding: 1px 8px; border-radius: 20px;
-    font-size: 10.5px; font-family: var(--font-mono);
-  }
-  .act-pill.feeding { background: var(--red-light);   color: var(--red); }
-  .act-pill.resting { background: var(--blue-light);  color: var(--blue); }
-  .act-pill.moving  { background: var(--accent2-light); color: var(--accent2); }
+#panel-data { flex-direction: column; background: var(–bg); }
+.table-toolbar {
+padding: 10px 20px; background: var(–surface);
+border-bottom: 1px solid var(–border);
+display: flex; align-items: center; gap: 12px; flex-shrink: 0;
+}
+.table-search {
+padding: 6px 12px; border: 1px solid var(–border); border-radius: var(–radius);
+background: var(–bg); font-family: var(–font-sans); font-size: 13px;
+color: var(–text-primary); outline: none; width: 260px;
+}
+.table-search:focus { border-color: var(–accent); }
+.table-count { font-family: var(–font-mono); font-size: 11px; color: var(–text-muted); margin-left: auto; }
+.table-wrap { flex: 1; overflow: auto; }
+.data-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.data-table thead { position: sticky; top: 0; z-index: 5; }
+.data-table th {
+background: var(–surface); border-bottom: 1px solid var(–border);
+padding: 9px 14px; text-align: left; font-weight: 500; font-size: 11px;
+font-family: var(–font-mono); letter-spacing: 0.05em; text-transform: uppercase;
+color: var(–text-muted); white-space: nowrap; cursor: pointer; user-select: none;
+}
+.data-table th:hover { color: var(–text-primary); }
+.data-table th.sort-asc::after  { content: ’ ↑’; color: var(–accent); }
+.data-table th.sort-desc::after { content: ’ ↓’; color: var(–accent); }
+.data-table td {
+padding: 8px 14px; border-bottom: 1px solid var(–border-soft);
+color: var(–text-primary); white-space: nowrap; max-width: 220px;
+overflow: hidden; text-overflow: ellipsis;
+}
+.data-table tr:hover td { background: var(–accent-light); }
+.data-table td a { color: var(–accent); text-decoration: none; font-size: 11px; }
+.data-table td a:hover { text-decoration: underline; }
+.act-pill {
+display: inline-block; padding: 1px 8px; border-radius: 20px;
+font-size: 10.5px; font-family: var(–font-mono);
+}
+.act-pill.feeding { background: var(–red-light);   color: var(–red); }
+.act-pill.resting { background: var(–blue-light);  color: var(–blue); }
+.act-pill.moving  { background: var(–accent2-light); color: var(–accent2); }
 </style>
+
 </head>
 <body>
 <div id="app">
@@ -324,7 +330,6 @@
   </div>
 
   <div class="content">
-    <!-- Graph panel -->
     <div class="panel active" id="panel-graph">
       <div class="sidebar">
         <div class="sidebar-section">
@@ -398,50 +403,51 @@
       </div>
     </div>
 
-    <!-- Map panel -->
-    <div class="panel" id="panel-map">
-      <div class="sidebar">
-        <div class="sidebar-section">
-          <div class="sidebar-label">Filters</div>
-          <div class="filter-group">
-            <label>Arthropod group</label>
-            <select id="fm-group"><option value="">All groups</option></select>
-          </div>
-          <div class="filter-group">
-            <label>Activity</label>
-            <select id="fm-activity">
-              <option value="">All activities</option>
-              <option value="Feeding">Feeding</option>
-              <option value="Resting">Resting</option>
-              <option value="Moving">Moving</option>
-            </select>
-          </div>
-        </div>
-        <div class="sidebar-section">
-          <div class="sidebar-label">Marker colour</div>
-          <div class="legend-item"><div class="legend-dot" style="background:var(--feeding)"></div> Feeding</div>
-          <div class="legend-item"><div class="legend-dot" style="background:var(--resting)"></div> Resting</div>
-          <div class="legend-item"><div class="legend-dot" style="background:var(--moving)"></div> Moving</div>
-          <div class="legend-item"><div class="legend-dot" style="background:var(--text-muted)"></div> Unknown</div>
-          <div class="legend-note" style="margin-top:6px;line-height:1.6">Click any marker to see observation details.</div>
-        </div>
+```
+<div class="panel" id="panel-map">
+  <div class="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-label">Filters</div>
+      <div class="filter-group">
+        <label>Arthropod group</label>
+        <select id="fm-group"><option value="">All groups</option></select>
       </div>
-      <div id="map"></div>
+      <div class="filter-group">
+        <label>Activity</label>
+        <select id="fm-activity">
+          <option value="">All activities</option>
+          <option value="Feeding">Feeding</option>
+          <option value="Resting">Resting</option>
+          <option value="Moving">Moving</option>
+        </select>
+      </div>
     </div>
+    <div class="sidebar-section">
+      <div class="sidebar-label">Marker colour</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--feeding)"></div> Feeding</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--resting)"></div> Resting</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--moving)"></div> Moving</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--text-muted)"></div> Unknown</div>
+      <div class="legend-note" style="margin-top:6px;line-height:1.6">Click any marker to see observation details.</div>
+    </div>
+  </div>
+  <div id="map"></div>
+</div>
 
-    <!-- Data panel -->
-    <div class="panel" id="panel-data">
-      <div class="table-toolbar">
-        <input type="text" class="table-search" id="table-search" placeholder="Search observations…"/>
-        <span class="table-count" id="table-count"></span>
-      </div>
-      <div class="table-wrap">
-        <table class="data-table" id="data-table">
-          <thead id="table-head"></thead>
-          <tbody id="table-body"></tbody>
-        </table>
-      </div>
-    </div>
+<div class="panel" id="panel-data">
+  <div class="table-toolbar">
+    <input type="text" class="table-search" id="table-search" placeholder="Search observations…"/>
+    <span class="table-count" id="table-count"></span>
+  </div>
+  <div class="table-wrap">
+    <table class="data-table" id="data-table">
+      <thead id="table-head"></thead>
+      <tbody id="table-body"></tbody>
+    </table>
+  </div>
+</div>
+```
+
   </div>
 </div>
 
@@ -457,7 +463,7 @@
 
 <script>
 let allObs = [];
-let rawSheetData = []; // full rows for the data table
+let rawSheetData = [];
 let map = null;
 let mapMarkers = [];
 let simulation = null;
@@ -466,7 +472,6 @@ let tableSort = { col: null, dir: 1 };
 
 const DEFAULT_URL = 'https://raw.githubusercontent.com/hansenvalueinvesting/plant-bug-interactive-map/main/example-sheet-formatting.xlsx';
 
-// ── Auto-load default dataset on startup ───────────────────────────────────
 window.addEventListener('DOMContentLoaded', () => {
   showLoading('Loading example dataset…');
   fetch(DEFAULT_URL)
@@ -488,10 +493,7 @@ window.addEventListener('DOMContentLoaded', () => {
       document.getElementById('empty-state').classList.add('hidden');
       hideLoading();
     })
-    .catch(() => {
-      hideLoading();
-      // silently fail — user can still upload manually
-    });
+    .catch(() => { hideLoading(); });
 });
 
 function showLoading(msg) {
@@ -502,7 +504,6 @@ function hideLoading() {
   document.getElementById('loading-overlay').classList.remove('active');
 }
 
-// ── Column finder ──────────────────────────────────────────────────────────
 function findCol(headers, keywords) {
   for (const kw of keywords) {
     const h = headers.find(h => h && h.toString().toLowerCase().includes(kw.toLowerCase()));
@@ -515,7 +516,6 @@ function parseSheet(data) {
   if (!data || data.length < 2) return [];
   const rawHeaders = data[0];
   const headers = rawHeaders.map(h => h ? h.toString().trim() : '');
-
   const keys = {
     lat:      findCol(headers, ['latitude', 'lat']),
     lon:      findCol(headers, ['longitude', 'lon']),
@@ -528,13 +528,10 @@ function parseSheet(data) {
     stage:    findCol(headers, ['developmental stage', 'stage']),
     url:      findCol(headers, ['observation url', 'url']),
   };
-
   const idx = {};
   Object.keys(keys).forEach(k => { idx[k] = keys[k] !== null ? headers.indexOf(keys[k]) : -1; });
-
   const get = (row, k) => idx[k] >= 0 ? (row[idx[k]] != null ? row[idx[k]].toString().trim() : '') : '';
   const clean = v => (!v || v === '-' || v.toLowerCase() === 'n/a' || v.toLowerCase() === 'nan') ? '' : v;
-
   return data.slice(1).map(row => ({
     lat:      parseFloat(get(row,'lat')) || null,
     lon:      parseFloat(get(row,'lon')) || null,
@@ -549,7 +546,6 @@ function parseSheet(data) {
   })).filter(o => o.lat || o.lon || o.plant || o.taxon || o.group);
 }
 
-// ── File load ──────────────────────────────────────────────────────────────
 document.getElementById('file-input').addEventListener('change', e => {
   if (e.target.files[0]) loadFile(e.target.files[0]);
   e.target.value = '';
@@ -574,6 +570,12 @@ function loadFile(file) {
     allObs = parseSheet(data);
     hideLoading();
     if (allObs.length === 0) { alert('No valid observations found. Check that your spreadsheet has Latitude, Longitude, and arthropod/plant columns.'); return; }
+
+    if (window._analyticsTransaction) {
+      window._analyticsTransaction(window._analyticsRef(window._analyticsDb, `visits/${window._analyticsAppKey}`), n => (n || 0) + 1);
+      window._analyticsTransaction(window._analyticsRef(window._analyticsDb, "visits/total"), n => (n || 0) + 1);
+    }
+
     populateFilters();
     applyFilters();
     buildDataTable();
@@ -583,11 +585,9 @@ function loadFile(file) {
   reader.readAsArrayBuffer(file);
 }
 
-// ── Filters ────────────────────────────────────────────────────────────────
 function populateFilters() {
   const groups = [...new Set(allObs.map(o => o.group).filter(Boolean))].sort();
   const plants = [...new Set(allObs.map(o => o.plant).filter(Boolean))].sort();
-
   ['f-group','fm-group'].forEach(id => {
     const s = document.getElementById(id);
     s.innerHTML = '<option value="">All groups</option>';
@@ -608,17 +608,8 @@ function applyFilters() {
   const fp = document.getElementById('f-plant').value;
   const mg = document.getElementById('fm-group').value;
   const ma = document.getElementById('fm-activity').value;
-
-  const graphObs = allObs.filter(o =>
-    (!fg || o.group === fg) &&
-    (!fa || o.activity === fa) &&
-    (!fp || o.plant === fp)
-  );
-  const mapObs = allObs.filter(o =>
-    (!mg || o.group === mg) &&
-    (!ma || o.activity === ma)
-  );
-
+  const graphObs = allObs.filter(o => (!fg || o.group === fg) && (!fa || o.activity === fa) && (!fp || o.plant === fp));
+  const mapObs = allObs.filter(o => (!mg || o.group === mg) && (!ma || o.activity === ma));
   updateChips(graphObs);
   buildGraph(graphObs);
   buildMap(mapObs);
@@ -634,7 +625,6 @@ function updateChips(obs) {
   document.getElementById('chip-edges').textContent  = edges.size;
 }
 
-// ── Force graph ────────────────────────────────────────────────────────────
 function dominantActivity(acts) {
   if (!acts) return 'mixed';
   const valid = Object.entries(acts).filter(([k]) => k && k !== 'unknown');
@@ -650,11 +640,8 @@ function buildGraph(obs) {
   svg.selectAll('*').remove();
   if (simulation) { simulation.stop(); simulation = null; }
   if (!obs.length) return;
-
   const container = document.getElementById('graph-container');
   const W = container.clientWidth, H = container.clientHeight;
-
-  // Aggregate
   const insectQty = {}, plantQty = {}, edgeMap = {};
   obs.forEach(o => {
     const insect = o.taxon || o.group;
@@ -669,7 +656,6 @@ function buildGraph(obs) {
       edgeMap[key].acts[a] = (edgeMap[key].acts[a]||0) + 1;
     }
   });
-
   const nodes = [
     ...Object.keys(insectQty).map(id => ({ id, type: 'insect', count: insectQty[id] })),
     ...Object.keys(plantQty) .map(id => ({ id, type: 'plant',  count: plantQty[id] })),
@@ -677,16 +663,11 @@ function buildGraph(obs) {
   const links = Object.values(edgeMap);
   currentLinks = links;
   if (!nodes.length) return;
-
   const maxCount = Math.max(...nodes.map(n=>n.count), 1);
   const rScale = d3.scaleSqrt().domain([1, maxCount]).range([9, 32]);
   const lScale = d3.scaleLinear().domain([1, Math.max(...links.map(l=>l.count),1)]).range([1.5, 7]);
-
-  // Zoom layer
   const g = svg.append('g');
   svg.call(d3.zoom().scaleExtent([0.25, 5]).on('zoom', e => g.attr('transform', e.transform)));
-
-  // Arrow markers
   const defs = svg.append('defs');
   const arrowColors = { feeding:'#c0392b', resting:'#1a4a6b', moving:'#b07d1a', mixed:'#9e9c92' };
   Object.entries(arrowColors).forEach(([cls, color]) => {
@@ -694,15 +675,11 @@ function buildGraph(obs) {
       .attr('markerWidth',5).attr('markerHeight',5).attr('orient','auto-start-reverse')
       .append('path').attr('d','M2 2L8 5L2 8').attr('fill','none').attr('stroke',color).attr('stroke-width',1.5).attr('stroke-linecap','round').attr('stroke-linejoin','round');
   });
-
-  // Links
   const linkSel = g.append('g').attr('opacity', 0.65)
     .selectAll('line').data(links).join('line')
     .attr('class', d => `link ${dominantActivity(d.acts)}`)
     .attr('stroke-width', d => lScale(d.count))
     .attr('marker-end', d => `url(#arr-${dominantActivity(d.acts)})`);
-
-  // Nodes
   const nodeSel = g.append('g').selectAll('g').data(nodes).join('g')
     .style('cursor','pointer')
     .call(d3.drag()
@@ -714,35 +691,24 @@ function buildGraph(obs) {
     .on('mouseenter', (ev,d) => showTooltip(ev,d))
     .on('mousemove', moveTooltip)
     .on('mouseleave', hideTooltip);
-
-  // Insect: circles
   nodeSel.filter(d=>d.type==='insect').append('circle')
     .attr('r', d=>rScale(d.count))
     .attr('fill','#2d5a1b').attr('fill-opacity',0.88)
     .attr('stroke','#1a3a0f').attr('stroke-width',0.5);
-
-  // Plant: rounded rects
   nodeSel.filter(d=>d.type==='plant').each(function(d) {
     const r = rScale(d.count);
     d3.select(this).append('rect')
       .attr('width', r*2.4).attr('height', r*1.6)
-      .attr('x',-r*1.2).attr('y',-r*0.8)
-      .attr('rx',6)
+      .attr('x',-r*1.2).attr('y',-r*0.8).attr('rx',6)
       .attr('fill','#7a4f1d').attr('fill-opacity',0.88)
       .attr('stroke','#4a2f0d').attr('stroke-width',0.5);
   });
-
-  // Labels
   nodeSel.append('text')
     .text(d => d.id.length > 20 ? d.id.slice(0,18)+'…' : d.id)
     .attr('text-anchor','middle')
-    .attr('dy', d => {
-      const r = rScale(d.count);
-      return d.type==='insect' ? r+14 : r*0.8+14;
-    })
+    .attr('dy', d => { const r = rScale(d.count); return d.type==='insect' ? r+14 : r*0.8+14; })
     .attr('fill','var(--text-primary)').attr('font-size','10px').attr('font-family','DM Mono, monospace')
     .attr('pointer-events','none');
-
   simulation = d3.forceSimulation(nodes)
     .force('link', d3.forceLink(links).id(d=>d.id).distance(130).strength(0.5))
     .force('charge', d3.forceManyBody().strength(-350))
@@ -752,49 +718,29 @@ function buildGraph(obs) {
       linkSel.attr('x1',d=>d.source.x).attr('y1',d=>d.source.y).attr('x2',d=>d.target.x).attr('y2',d=>d.target.y);
       nodeSel.attr('transform',d=>`translate(${d.x},${d.y})`);
     });
-
   svg.on('click', () => document.getElementById('detail-card').classList.remove('visible'));
 }
 
-// ── Detail card ────────────────────────────────────────────────────────────
 function showDetail(d, obs) {
   const card = document.getElementById('detail-card');
   const isInsect = d.type === 'insect';
-
   document.getElementById('dc-icon').className  = `detail-icon ${isInsect?'insect':'plant'}`;
   document.getElementById('dc-icon').textContent = isInsect ? '🐛' : '🌿';
   document.getElementById('dc-title').textContent = d.id;
   const typeEl = document.getElementById('dc-type');
   typeEl.textContent = isInsect ? 'Arthropod' : 'Host plant';
   typeEl.className = `detail-sub ${isInsect?'insect':'plant'}`;
-
-  const myObs = obs.filter(o => isInsect
-    ? (o.taxon===d.id || o.group===d.id)
-    : o.plant===d.id);
+  const myObs = obs.filter(o => isInsect ? (o.taxon===d.id || o.group===d.id) : o.plant===d.id);
   document.getElementById('dc-obs').textContent = myObs.length;
   document.getElementById('dc-qty').textContent = myObs.reduce((s,o)=>s+o.qty,0);
-
-  // Partners from live links
   const partners = currentLinks
-    .filter(l => {
-      const sid = typeof l.source==='object'?l.source.id:l.source;
-      const tid = typeof l.target==='object'?l.target.id:l.target;
-      return sid===d.id || tid===d.id;
-    })
-    .map(l => {
-      const sid = typeof l.source==='object'?l.source.id:l.source;
-      const tid = typeof l.target==='object'?l.target.id:l.target;
-      return sid===d.id ? tid : sid;
-    });
+    .filter(l => { const sid = typeof l.source==='object'?l.source.id:l.source; const tid = typeof l.target==='object'?l.target.id:l.target; return sid===d.id || tid===d.id; })
+    .map(l => { const sid = typeof l.source==='object'?l.source.id:l.source; const tid = typeof l.target==='object'?l.target.id:l.target; return sid===d.id ? tid : sid; });
   const pEl = document.getElementById('dc-partners');
   const partnerLabel = isInsect ? 'Host plants' : 'Arthropod taxa';
   if (partners.length) {
     pEl.innerHTML = `<strong>${partnerLabel}:</strong> ${partners.slice(0,4).join(', ')}${partners.length>4?` +${partners.length-4} more`:''}`;
-  } else {
-    pEl.textContent = '';
-  }
-
-  // Activities
+  } else { pEl.textContent = ''; }
   const acts = {};
   myObs.forEach(o => { if(o.activity) acts[o.activity]=(acts[o.activity]||0)+1; });
   const actsEl = document.getElementById('dc-activities');
@@ -805,7 +751,6 @@ function showDetail(d, obs) {
     b.textContent = `${act} ${cnt}`;
     actsEl.appendChild(b);
   });
-
   card.classList.add('visible');
 }
 
@@ -813,7 +758,6 @@ document.getElementById('detail-close').addEventListener('click', () => {
   document.getElementById('detail-card').classList.remove('visible');
 });
 
-// ── Tooltip ────────────────────────────────────────────────────────────────
 function showTooltip(event, d) {
   const t = document.getElementById('tooltip');
   const typeLabel = d.type==='insect' ? 'Arthropod' : 'Host plant';
@@ -824,14 +768,12 @@ function showTooltip(event, d) {
 function moveTooltip(event) {
   const t = document.getElementById('tooltip');
   const r = document.getElementById('graph-container').getBoundingClientRect();
-  let x = event.clientX - r.left + 14;
-  let y = event.clientY - r.top + 14;
+  let x = event.clientX - r.left + 14, y = event.clientY - r.top + 14;
   if (x + 220 > r.width) x -= 230;
   t.style.left = x+'px'; t.style.top = y+'px';
 }
 function hideTooltip() { document.getElementById('tooltip').classList.remove('visible'); }
 
-// ── Map ────────────────────────────────────────────────────────────────────
 function buildMap(obs) {
   if (!map) {
     map = L.map('map', { zoomControl: true });
@@ -842,12 +784,9 @@ function buildMap(obs) {
   }
   mapMarkers.forEach(m => m.remove());
   mapMarkers = [];
-
   const valid = obs.filter(o => o.lat && o.lon);
   if (!valid.length) return;
-
   const actColors = { feeding:'#c0392b', resting:'#1a4a6b', moving:'#b07d1a' };
-
   valid.forEach(o => {
     const color = actColors[(o.activity||'').toLowerCase()] || '#6b6a62';
     const icon = L.divIcon({
@@ -855,37 +794,20 @@ function buildMap(obs) {
       html: `<div style="width:11px;height:11px;border-radius:50%;background:${color};border:2px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,0.28)"></div>`,
       iconSize: [11,11], iconAnchor: [5.5,5.5]
     });
-    const actBadge = o.activity
-      ? `<span class="popup-act" style="background:${color}18;color:${color}">${o.activity}</span>`
-      : '';
+    const actBadge = o.activity ? `<span class="popup-act" style="background:${color}18;color:${color}">${o.activity}</span>` : '';
     const m = L.marker([o.lat, o.lon], { icon }).addTo(map);
-    m.bindPopup(`
-      <div class="popup-inner">
-        <div class="popup-title">${o.taxon || o.group || 'Unknown arthropod'}</div>
-        <div class="popup-row">Plant: ${o.plant || '—'}</div>
-        <div class="popup-row">Quantity: ${o.qty}</div>
-        ${o.stage ? `<div class="popup-row">Stage: ${o.stage}</div>` : ''}
-        ${o.date  ? `<div class="popup-row">Date: ${o.date}</div>` : ''}
-        ${actBadge}
-      </div>
-    `, { maxWidth: 220 });
+    m.bindPopup(`<div class="popup-inner"><div class="popup-title">${o.taxon || o.group || 'Unknown arthropod'}</div><div class="popup-row">Plant: ${o.plant || '—'}</div><div class="popup-row">Quantity: ${o.qty}</div>${o.stage ? `<div class="popup-row">Stage: ${o.stage}</div>` : ''}${o.date  ? `<div class="popup-row">Date: ${o.date}</div>` : ''}${actBadge}</div>`, { maxWidth: 220 });
     mapMarkers.push(m);
   });
-
   const lats = valid.map(o=>o.lat), lons = valid.map(o=>o.lon);
   map.fitBounds([[Math.min(...lats)-0.015, Math.min(...lons)-0.015],[Math.max(...lats)+0.015, Math.max(...lons)+0.015]], { padding:[30,30] });
 }
 
-// ── Data table ─────────────────────────────────────────────────────────────
 function buildDataTable() {
   if (!rawSheetData || rawSheetData.length < 2) return;
   const headers = rawSheetData[0].map(h => h ? h.toString().trim() : '');
   const rows = rawSheetData.slice(1);
-
-  // Columns to show — strip emoji prefixes for display
   const displayHeaders = headers.map(h => h.replace(/^[\u{1F300}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}️⏱◌☑⛅✨➰🌡🌬🌱🌿🍁🐛👍👩💦💫📏📸🔎🔏🔦🔲🕓🧮🪲😓🆔〰]\s*/gu, '').trim());
-
-  // Build head
   const thead = document.getElementById('table-head');
   thead.innerHTML = '';
   const tr = document.createElement('tr');
@@ -897,11 +819,8 @@ function buildDataTable() {
     tr.appendChild(th);
   });
   thead.appendChild(tr);
-
   renderTableRows(rows, headers);
   document.getElementById('table-count').textContent = `${rows.length} rows`;
-
-  // Search
   document.getElementById('table-search').oninput = function() {
     const q = this.value.toLowerCase();
     const filtered = q ? rows.filter(r => r.some(c => c && c.toString().toLowerCase().includes(q))) : rows;
@@ -940,23 +859,19 @@ function sortTable(colIdx, headerName) {
   const rows = rawSheetData.slice(1);
   const q = document.getElementById('table-search').value.toLowerCase();
   const filtered = q ? rows.filter(r => r.some(c => c && c.toString().toLowerCase().includes(q))) : rows;
-
   if (tableSort.col === colIdx) { tableSort.dir *= -1; } else { tableSort.col = colIdx; tableSort.dir = 1; }
-
   filtered.sort((a, b) => {
     const av = a[colIdx] != null ? a[colIdx].toString() : '';
     const bv = b[colIdx] != null ? b[colIdx].toString() : '';
     const n = parseFloat(av) - parseFloat(bv);
     return (isNaN(n) ? av.localeCompare(bv) : n) * tableSort.dir;
   });
-
   document.querySelectorAll('.data-table th').forEach(th => th.classList.remove('sort-asc','sort-desc'));
   const ths = document.querySelectorAll('.data-table th');
   if (ths[colIdx]) ths[colIdx].classList.add(tableSort.dir === 1 ? 'sort-asc' : 'sort-desc');
   renderTableRows(filtered, rawSheetData[0].map(h => h ? h.toString().trim() : ''));
 }
 
-// ── Tabs ───────────────────────────────────────────────────────────────────
 document.querySelectorAll('.tab').forEach(tab => {
   tab.addEventListener('click', () => {
     document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
@@ -967,8 +882,8 @@ document.querySelectorAll('.tab').forEach(tab => {
   });
 });
 
-// Init map container
 setTimeout(()=>{ if(!map && allObs.length) buildMap([]); }, 200);
 </script>
+
 </body>
 </html>
