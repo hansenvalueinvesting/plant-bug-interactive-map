@@ -148,10 +148,6 @@
   #graph-svg { width: 100%; height: 100%; }
 
   .link { fill: none; }
-  .link.feeding { stroke: var(--feeding); }
-  .link.resting { stroke: var(--resting); }
-  .link.moving  { stroke: var(--moving); }
-  .link.mixed   { stroke: var(--text-muted); }
 
   #detail-card {
     position: absolute; bottom: 16px; right: 16px;
@@ -440,9 +436,9 @@
             <label>Activity</label>
             <select id="f-activity">
               <option value="">All activities</option>
-              <option value="Feeding">Feeding</option>
-              <option value="Resting">Resting</option>
-              <option value="Moving">Moving</option>
+              <option value="feeding">Feeding</option>
+              <option value="resting">Resting</option>
+              <option value="moving">Moving</option>
             </select>
           </div>
           <div class="filter-group">
@@ -452,10 +448,10 @@
         </div>
         <div class="sidebar-section">
           <div class="sidebar-label">Nodes</div>
-          <!-- FIX 1: Legend updated — plant is green circle, insect is brown square -->
-          <div class="legend-item"><div class="legend-dot" style="background:var(--node-plant)"></div> Host plant</div>
-          <div class="legend-item"><div class="legend-sq" style="background:var(--node-insect)"></div> Arthropod taxon</div>
-          <div class="legend-note">Node size = total individuals observed</div>
+          <!-- plants = green rounded rect, insects = brown circle -->
+          <div class="legend-item"><div class="legend-sq" style="background:var(--node-plant)"></div> Host plant</div>
+          <div class="legend-item"><div class="legend-dot" style="background:var(--node-insect)"></div> Arthropod taxon</div>
+          <div class="legend-note">Node size = total individuals (qty sum)</div>
         </div>
         <div class="sidebar-section">
           <div class="sidebar-label">Edges — activity</div>
@@ -463,7 +459,7 @@
           <div class="legend-item"><div class="legend-line" style="background:var(--resting)"></div> Resting</div>
           <div class="legend-item"><div class="legend-line" style="background:var(--moving)"></div> Moving</div>
           <div class="legend-item"><div class="legend-line" style="background:var(--text-muted)"></div> Mixed / unknown</div>
-          <div class="legend-note">Edge thickness = observation count</div>
+          <div class="legend-note">Edge thickness = individuals (qty sum)</div>
         </div>
         <div class="sidebar-section">
           <div class="legend-note" style="line-height:1.6">Drag nodes to rearrange. Click any node for details. Scroll to zoom.</div>
@@ -518,9 +514,9 @@
             <label>Activity</label>
             <select id="fm-activity">
               <option value="">All activities</option>
-              <option value="Feeding">Feeding</option>
-              <option value="Resting">Resting</option>
-              <option value="Moving">Moving</option>
+              <option value="feeding">Feeding</option>
+              <option value="resting">Resting</option>
+              <option value="moving">Moving</option>
             </select>
           </div>
         </div>
@@ -696,15 +692,16 @@ function parseSheet(data) {
   const idx = {};
   Object.keys(keys).forEach(k => { idx[k] = keys[k] !== null ? headers.indexOf(keys[k]) : -1; });
   const get = (row, k) => idx[k] >= 0 ? (row[idx[k]] != null ? row[idx[k]].toString().trim() : '') : '';
-  const toTitleCase = s => s ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : s;
   const clean = v => (!v || v === '-' || v.toLowerCase() === 'n/a' || v.toLowerCase() === 'nan') ? '' : v;
+  // Store activity as lowercase — all lookups and comparisons use lowercase.
+  // Display label is capitalized on-the-fly wherever needed.
   return data.slice(1).map(row => ({
     lat:      parseFloat(get(row,'lat')) || null,
     lon:      parseFloat(get(row,'lon')) || null,
     plant:    clean(get(row,'plant')),
     taxon:    clean(get(row,'taxon')),
     group:    clean(get(row,'group')),
-    activity: toTitleCase(clean(get(row,'activity'))),
+    activity: clean(get(row,'activity')).toLowerCase(),
     qty:      parseInt(get(row,'qty')) || 1,
     date:     formatDate(idx['date'] >= 0 ? row[idx['date']] : ''),
     stage:    clean(get(row,'stage')),
@@ -813,15 +810,17 @@ function buildGraph(obs) {
   obs.forEach(o => {
     const insect = o.taxon || o.group;
     const plant  = o.plant;
+    // Size nodes by individuals (qty), not observation count
     if (insect) insectQty[insect] = (insectQty[insect]||0) + o.qty;
     if (plant)  plantQty[plant]   = (plantQty[plant]  ||0) + o.qty;
     if (insect && plant) {
       const key = `${insect}||${plant}`;
       if (!edgeMap[key]) edgeMap[key] = { source: insect, target: plant, count: 0, acts: {} };
+      // Edge thickness by individuals too
       edgeMap[key].count += o.qty;
-      // Normalize activity key to lowercase so it matches CSS classes
+      // Track activity counts (lowercase) for dominant-activity coloring
       const a = (o.activity || 'unknown').toLowerCase();
-      edgeMap[key].acts[a] = (edgeMap[key].acts[a]||0) + 1;
+      edgeMap[key].acts[a] = (edgeMap[key].acts[a]||0) + o.qty;
     }
   });
   const nodes = [
@@ -856,12 +855,15 @@ function buildGraph(obs) {
       .attr('markerWidth',5).attr('markerHeight',5).attr('orient','auto-start-reverse')
       .append('path').attr('d','M2 2L8 5L2 8').attr('fill','none').attr('stroke',color).attr('stroke-width',1.5).attr('stroke-linecap','round').attr('stroke-linejoin','round');
   });
-  const linkSel = g.append('g').attr('opacity', 0.65)
+  // Edge color lookup — must be hardcoded hex so SVG stroke attribute works
+  const EDGE_COLORS = { feeding: '#c0392b', resting: '#1a4a6b', moving: '#b07d1a', mixed: '#9e9c92' };
+
+  const linkSel = g.append('g').attr('opacity', 0.72)
     .selectAll('line').data(links).join('line')
-    .attr('class', d => `link ${dominantActivity(d.acts)}`)
+    .attr('class', 'link')
+    .attr('stroke', d => EDGE_COLORS[dominantActivity(d.acts)] || EDGE_COLORS.mixed)
     .attr('stroke-width', d => lScale(d.count))
-    .attr('marker-end', d => `url(#arr-${dominantActivity(d.acts)})`);
-  const nodeSel = g.append('g').selectAll('g').data(nodes).join('g')
+    .attr('marker-end', d => `url(#arr-${dominantActivity(d.acts)})`);  const nodeSel = g.append('g').selectAll('g').data(nodes).join('g')
     .style('cursor','pointer')
     .call(d3.drag()
       .on('start',(ev,d)=>{ if(!ev.active) simulation.alphaTarget(0.3).restart(); d.fx=d.x; d.fy=d.y; })
@@ -873,25 +875,25 @@ function buildGraph(obs) {
     .on('mousemove', moveTooltip)
     .on('mouseleave', hideTooltip);
 
-  // FIX 1: Plants → green circles, insects → brown rectangles (swapped from original)
-  nodeSel.filter(d=>d.type==='plant').append('circle')
-    .attr('r', d=>rScale(d.count))
-    .attr('fill','#2d5a1b').attr('fill-opacity',0.88)
-    .attr('stroke','#1a3a0f').attr('stroke-width',0.5);
-  nodeSel.filter(d=>d.type==='insect').each(function(d) {
+  // Plants → green rounded rectangles, insects → brown circles
+  nodeSel.filter(d=>d.type==='plant').each(function(d) {
     const r = rScale(d.count);
     d3.select(this).append('rect')
       .attr('width', r*2.4).attr('height', r*1.6)
       .attr('x',-r*1.2).attr('y',-r*0.8).attr('rx',6)
-      .attr('fill','#7a4f1d').attr('fill-opacity',0.88)
-      .attr('stroke','#4a2f0d').attr('stroke-width',0.5);
+      .attr('fill','#2d5a1b').attr('fill-opacity',0.88)
+      .attr('stroke','#1a3a0f').attr('stroke-width',0.5);
   });
+  nodeSel.filter(d=>d.type==='insect').append('circle')
+    .attr('r', d=>rScale(d.count))
+    .attr('fill','#7a4f1d').attr('fill-opacity',0.88)
+    .attr('stroke','#4a2f0d').attr('stroke-width',0.5);
 
   const labelSize = isMobile ? '8px' : '10px';
   nodeSel.append('text')
     .text(d => d.id.length > (isMobile ? 14 : 20) ? d.id.slice(0, isMobile ? 12 : 18)+'…' : d.id)
     .attr('text-anchor','middle')
-    .attr('dy', d => { const r = rScale(d.count); return d.type==='plant' ? r+14 : r*0.8+14; })
+    .attr('dy', d => { const r = rScale(d.count); return d.type==='insect' ? r+14 : r*0.8+14; })
     .attr('fill','var(--text-primary)').attr('font-size', labelSize).attr('font-family','DM Mono, monospace')
     .attr('pointer-events','none');
   simulation = d3.forceSimulation(nodes)
@@ -942,8 +944,8 @@ function showDetail(d, obs) {
   actsEl.innerHTML = '';
   Object.entries(acts).sort((a,b)=>b[1]-a[1]).forEach(([act,cnt]) => {
     const b = document.createElement('span');
-    b.className = `act-badge ${act.toLowerCase()}`;
-    b.textContent = `${act} ${cnt}`;
+    b.className = `act-badge ${act}`;
+    b.textContent = `${act.charAt(0).toUpperCase()+act.slice(1)} ${cnt}`;
     actsEl.appendChild(b);
   });
   card.classList.add('visible');
@@ -984,9 +986,8 @@ function buildMap(obs) {
   const valid = obs.filter(o => o.lat && o.lon);
   if (!valid.length) return;
   const markers = valid.map(o => {
-    // FIX 3: Normalize to lowercase before lookup so "Feeding", "FEEDING",
-    // "feeding" all resolve correctly. Fall back to gray for blank/unknown.
-    const actKey = (o.activity || '').trim().toLowerCase();
+    // activity is stored lowercase — direct lookup, no .toLowerCase() needed
+    const actKey = o.activity || '';
     const color = ACT_COLORS[actKey] || '#6b6a62';
     const marker = L.circleMarker([o.lat, o.lon], {
       radius: 6,
@@ -995,8 +996,9 @@ function buildMap(obs) {
       weight: 2,
       fillOpacity: 0.9
     });
+    const actLabel = actKey ? actKey.charAt(0).toUpperCase() + actKey.slice(1) : '';
     const actBadge = actKey && ACT_COLORS[actKey]
-      ? `<span class="popup-act" style="background:${color}28;color:${color}">${o.activity}</span>`
+      ? `<span class="popup-act" style="background:${color}28;color:${color}">${actLabel}</span>`
       : '';
     marker.bindPopup(
       '<div class="popup-inner">' +
@@ -1082,7 +1084,8 @@ function renderTableRows(rows, headers) {
         td.innerHTML = `<a href="${val}" target="_blank" rel="noopener">↗ view</a>`;
       } else if (i === actCol && val && val !== '-') {
         const cls = val.toLowerCase();
-        td.innerHTML = `<span class="act-pill ${cls}">${val}</span>`;
+        const label = cls.charAt(0).toUpperCase() + cls.slice(1);
+        td.innerHTML = `<span class="act-pill ${cls}">${label}</span>`;
       } else {
         td.textContent = val === '-' || val === '' ? '—' : val;
         td.title = val;
