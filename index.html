@@ -600,7 +600,6 @@ function setupSidebarToggle(toggleId, sidebarId) {
 
   backdrop.addEventListener('click', closeSidebar);
 
-  // Close sidebar when a filter value changes (on mobile)
   sidebar.querySelectorAll('select').forEach(sel => {
     sel.addEventListener('change', () => {
       if (window.innerWidth <= 640) {
@@ -623,7 +622,7 @@ window.addEventListener('DOMContentLoaded', () => {
       return r.arrayBuffer();
     })
     .then(buf => {
-      const wb = XLSX.read(buf, { type: 'array' });
+      const wb = XLSX.read(buf, { type: 'array', cellDates: true });
       const ws = wb.Sheets[wb.SheetNames[0]];
       const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
       rawSheetData = data;
@@ -657,6 +656,19 @@ function findCol(headers, keywords) {
   return null;
 }
 
+function formatDate(val) {
+  if (!val) return '';
+  // cellDates:true gives us a JS Date object for date cells
+  if (val instanceof Date && !isNaN(val)) {
+    const y = val.getFullYear();
+    const m = String(val.getMonth() + 1).padStart(2, '0');
+    const d = String(val.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+  // Already a formatted string (e.g. user typed "2024-06-15")
+  return val.toString().trim();
+}
+
 function parseSheet(data) {
   if (!data || data.length < 2) return [];
   const rawHeaders = data[0];
@@ -676,6 +688,7 @@ function parseSheet(data) {
   const idx = {};
   Object.keys(keys).forEach(k => { idx[k] = keys[k] !== null ? headers.indexOf(keys[k]) : -1; });
   const get = (row, k) => idx[k] >= 0 ? (row[idx[k]] != null ? row[idx[k]].toString().trim() : '') : '';
+  const toTitleCase = s => s ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : s;
   const clean = v => (!v || v === '-' || v.toLowerCase() === 'n/a' || v.toLowerCase() === 'nan') ? '' : v;
   return data.slice(1).map(row => ({
     lat:      parseFloat(get(row,'lat')) || null,
@@ -683,9 +696,11 @@ function parseSheet(data) {
     plant:    clean(get(row,'plant')),
     taxon:    clean(get(row,'taxon')),
     group:    clean(get(row,'group')),
-    activity: clean(get(row,'activity')),
+    // Normalize activity to title-case ("feeding" → "Feeding") so color
+    // lookups (ACT_COLORS[toLowerCase]) and filter comparisons both work
+    activity: toTitleCase(clean(get(row,'activity'))),
     qty:      parseInt(get(row,'qty')) || 1,
-    date:     clean(get(row,'date')),
+    date:     formatDate(idx['date'] >= 0 ? row[idx['date']] : ''),
     stage:    clean(get(row,'stage')),
     url:      clean(get(row,'url')),
   })).filter(o => o.lat || o.lon || o.plant || o.taxon || o.group);
@@ -708,7 +723,7 @@ function loadFile(file) {
   const reader = new FileReader();
   showLoading('Parsing spreadsheet…');
   reader.onload = ev => {
-    const wb = XLSX.read(ev.target.result, { type: 'array' });
+    const wb = XLSX.read(ev.target.result, { type: 'array', cellDates: true });
     const ws = wb.Sheets[wb.SheetNames[0]];
     const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
     rawSheetData = data;
@@ -781,16 +796,9 @@ function updateChips(obs) {
   document.getElementById('chip-edges').textContent  = edges.size;
 }
 
-function dominantActivity(acts) {
-  if (!acts) return 'mixed';
-  const valid = Object.entries(acts).filter(([k]) => k && k !== 'unknown');
-  if (!valid.length) return 'mixed';
-  if (valid.length === 1) return valid[0][0].toLowerCase();
-  const total = valid.reduce((s,[,v])=>s+v,0);
-  const [top] = valid.sort((a,b)=>b[1]-a[1]);
-  return (top[1]/total > 0.65) ? top[0].toLowerCase() : 'mixed';
-}
-
+// ── FIX 1: Normalize activity to lowercase when accumulating into edgeMap ──
+// This ensures the keys stored in edgeMap.acts are always lowercase,
+// matching what dominantActivity() expects and what CSS classes use.
 function buildGraph(obs) {
   const svg = d3.select('#graph-svg');
   svg.selectAll('*').remove();
@@ -808,7 +816,8 @@ function buildGraph(obs) {
       const key = `${insect}||${plant}`;
       if (!edgeMap[key]) edgeMap[key] = { source: insect, target: plant, count: 0, acts: {} };
       edgeMap[key].count += o.qty;
-      const a = o.activity || 'unknown';
+      // FIX 1: normalize activity key to lowercase so it matches CSS classes
+      const a = (o.activity || 'unknown').toLowerCase();
       edgeMap[key].acts[a] = (edgeMap[key].acts[a]||0) + 1;
     }
   });
@@ -819,10 +828,23 @@ function buildGraph(obs) {
   const links = Object.values(edgeMap);
   currentLinks = links;
   if (!nodes.length) return;
-  const maxCount = Math.max(...nodes.map(n=>n.count), 1);
+
+  const maxNodeCount = Math.max(...nodes.map(n=>n.count), 1);
+  const maxLinkCount = Math.max(...links.map(l=>l.count), 1);
   const isMobile = W < 640;
-  const rScale = d3.scaleSqrt().domain([1, maxCount]).range(isMobile ? [6, 22] : [9, 32]);
-  const lScale = d3.scaleLinear().domain([1, Math.max(...links.map(l=>l.count),1)]).range([1.5, 7]);
+
+  // FIX 2: Guard against degenerate domain [x, x] by ensuring max > min.
+  // When all nodes have the same count (e.g. all 1), scaleSqrt([1,1]) → NaN.
+  // We add 1 to the max if it equals the min so the scale always has range.
+  const rMin = 1;
+  const rMax = maxNodeCount > rMin ? maxNodeCount : rMin + 1;
+  const rScale = d3.scaleSqrt().domain([rMin, rMax]).range(isMobile ? [6, 22] : [9, 32]);
+
+  // FIX 3: Same guard for edge thickness scale.
+  const lMin = 1;
+  const lMax = maxLinkCount > lMin ? maxLinkCount : lMin + 1;
+  const lScale = d3.scaleLinear().domain([lMin, lMax]).range([1.5, 7]);
+
   const g = svg.append('g');
   svg.call(d3.zoom().scaleExtent([0.25, 5]).on('zoom', e => g.attr('transform', e.transform)));
   const defs = svg.append('defs');
@@ -879,6 +901,18 @@ function buildGraph(obs) {
   svg.on('click', () => document.getElementById('detail-card').classList.remove('visible'));
 }
 
+// dominantActivity now receives acts with lowercase keys (after Fix 1),
+// so comparisons and CSS class names all line up correctly.
+function dominantActivity(acts) {
+  if (!acts) return 'mixed';
+  const valid = Object.entries(acts).filter(([k]) => k && k !== 'unknown');
+  if (!valid.length) return 'mixed';
+  if (valid.length === 1) return valid[0][0]; // already lowercase
+  const total = valid.reduce((s,[,v])=>s+v,0);
+  const [top] = valid.sort((a,b)=>b[1]-a[1]);
+  return (top[1]/total > 0.65) ? top[0] : 'mixed';
+}
+
 function showDetail(d, obs) {
   const card = document.getElementById('detail-card');
   const isInsect = d.type === 'insect';
@@ -905,6 +939,7 @@ function showDetail(d, obs) {
   actsEl.innerHTML = '';
   Object.entries(acts).sort((a,b)=>b[1]-a[1]).forEach(([act,cnt]) => {
     const b = document.createElement('span');
+    // Use lowercase for CSS class matching
     b.className = `act-badge ${act.toLowerCase()}`;
     b.textContent = `${act} ${cnt}`;
     actsEl.appendChild(b);
@@ -1027,15 +1062,18 @@ function buildDataTable() {
 }
 
 function renderTableRows(rows, headers) {
-  const actCol = headers.findIndex(h => h && h.toLowerCase().includes('activity'));
-  const urlCol = headers.findIndex(h => h && h.toLowerCase().includes('observation url'));
+  const actCol  = headers.findIndex(h => h && h.toLowerCase().includes('activity'));
+  const urlCol  = headers.findIndex(h => h && h.toLowerCase().includes('observation url'));
+  const dateCol = headers.findIndex(h => h && h.toLowerCase().includes('date'));
   const tbody = document.getElementById('table-body');
   tbody.innerHTML = '';
   rows.forEach(row => {
     const tr = document.createElement('tr');
     row.forEach((cell, i) => {
       const td = document.createElement('td');
-      const val = cell != null ? cell.toString().trim() : '';
+      // Format date columns that came through as JS Date objects
+      const rawVal = (i === dateCol && cell instanceof Date) ? formatDate(cell) : cell;
+      const val = rawVal != null ? rawVal.toString().trim() : '';
       if (i === urlCol && val && val.startsWith('http')) {
         td.innerHTML = `<a href="${val}" target="_blank" rel="noopener">↗ view</a>`;
       } else if (i === actCol && val && val !== '-') {
