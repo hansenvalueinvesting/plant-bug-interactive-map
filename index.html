@@ -46,8 +46,9 @@
     --red-light: #fbeaea;
     --blue: #1a4a6b;
     --blue-light: #e3eef6;
-    --node-insect: #2d5a1b;
-    --node-plant: #7a4f1d;
+    /* FIX 1: Swapped node colors — plants are green, insects are brown */
+    --node-insect: #7a4f1d;
+    --node-plant: #2d5a1b;
     --feeding: #c0392b;
     --resting: #1a4a6b;
     --moving: #b07d1a;
@@ -167,12 +168,14 @@
     width: 32px; height: 32px; border-radius: 7px; flex-shrink: 0;
     display: flex; align-items: center; justify-content: center; font-size: 15px;
   }
-  .detail-icon.insect { background: var(--accent-light); }
-  .detail-icon.plant  { background: var(--accent2-light); }
+  /* FIX 1: detail card icon backgrounds updated to match swapped colors */
+  .detail-icon.insect { background: var(--accent2-light); }
+  .detail-icon.plant  { background: var(--accent-light); }
   .detail-title { font-weight: 500; font-size: 13px; margin-bottom: 2px; line-height: 1.3; }
   .detail-sub { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; }
-  .detail-sub.insect { color: var(--accent); }
-  .detail-sub.plant  { color: var(--accent2); }
+  /* FIX 1: detail sub label colors updated too */
+  .detail-sub.insect { color: var(--accent2); }
+  .detail-sub.plant  { color: var(--accent); }
   .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
   .detail-metric { background: var(--bg); border-radius: var(--radius); padding: 8px 10px; }
   .detail-metric-val { font-size: 18px; font-weight: 500; line-height: 1; margin-bottom: 2px; }
@@ -449,8 +452,9 @@
         </div>
         <div class="sidebar-section">
           <div class="sidebar-label">Nodes</div>
-          <div class="legend-item"><div class="legend-dot" style="background:var(--accent)"></div> Arthropod taxon</div>
-          <div class="legend-item"><div class="legend-sq" style="background:var(--accent2)"></div> Host plant</div>
+          <!-- FIX 1: Legend updated — plant is green circle, insect is brown square -->
+          <div class="legend-item"><div class="legend-dot" style="background:var(--node-plant)"></div> Host plant</div>
+          <div class="legend-item"><div class="legend-sq" style="background:var(--node-insect)"></div> Arthropod taxon</div>
           <div class="legend-note">Node size = total individuals observed</div>
         </div>
         <div class="sidebar-section">
@@ -576,7 +580,13 @@ let simulation = null;
 let currentLinks = [];
 let tableSort = { col: null, dir: 1 };
 
-const ACT_COLORS = { feeding: '#c0392b', resting: '#1a4a6b', moving: '#b07d1a' };
+// FIX 3: Map pin colors — defined with lowercase keys to match .toLowerCase() lookup.
+// Values use the same hex as the CSS variables so legend and pins stay in sync.
+const ACT_COLORS = {
+  feeding: '#c0392b',
+  resting: '#1a4a6b',
+  moving:  '#b07d1a'
+};
 
 const DEFAULT_URL = 'https://raw.githubusercontent.com/hansenvalueinvesting/plant-bug-interactive-map/main/example-sheet-formatting.xlsx';
 
@@ -658,14 +668,12 @@ function findCol(headers, keywords) {
 
 function formatDate(val) {
   if (!val) return '';
-  // cellDates:true gives us a JS Date object for date cells
   if (val instanceof Date && !isNaN(val)) {
     const y = val.getFullYear();
     const m = String(val.getMonth() + 1).padStart(2, '0');
     const d = String(val.getDate()).padStart(2, '0');
     return `${y}-${m}-${d}`;
   }
-  // Already a formatted string (e.g. user typed "2024-06-15")
   return val.toString().trim();
 }
 
@@ -696,8 +704,6 @@ function parseSheet(data) {
     plant:    clean(get(row,'plant')),
     taxon:    clean(get(row,'taxon')),
     group:    clean(get(row,'group')),
-    // Normalize activity to title-case ("feeding" → "Feeding") so color
-    // lookups (ACT_COLORS[toLowerCase]) and filter comparisons both work
     activity: toTitleCase(clean(get(row,'activity'))),
     qty:      parseInt(get(row,'qty')) || 1,
     date:     formatDate(idx['date'] >= 0 ? row[idx['date']] : ''),
@@ -796,9 +802,6 @@ function updateChips(obs) {
   document.getElementById('chip-edges').textContent  = edges.size;
 }
 
-// ── FIX 1: Normalize activity to lowercase when accumulating into edgeMap ──
-// This ensures the keys stored in edgeMap.acts are always lowercase,
-// matching what dominantActivity() expects and what CSS classes use.
 function buildGraph(obs) {
   const svg = d3.select('#graph-svg');
   svg.selectAll('*').remove();
@@ -816,7 +819,7 @@ function buildGraph(obs) {
       const key = `${insect}||${plant}`;
       if (!edgeMap[key]) edgeMap[key] = { source: insect, target: plant, count: 0, acts: {} };
       edgeMap[key].count += o.qty;
-      // FIX 1: normalize activity key to lowercase so it matches CSS classes
+      // Normalize activity key to lowercase so it matches CSS classes
       const a = (o.activity || 'unknown').toLowerCase();
       edgeMap[key].acts[a] = (edgeMap[key].acts[a]||0) + 1;
     }
@@ -833,17 +836,16 @@ function buildGraph(obs) {
   const maxLinkCount = Math.max(...links.map(l=>l.count), 1);
   const isMobile = W < 640;
 
-  // FIX 2: Guard against degenerate domain [x, x] by ensuring max > min.
-  // When all nodes have the same count (e.g. all 1), scaleSqrt([1,1]) → NaN.
-  // We add 1 to the max if it equals the min so the scale always has range.
+  // Node size scale — guard against degenerate domain [x, x]
   const rMin = 1;
   const rMax = maxNodeCount > rMin ? maxNodeCount : rMin + 1;
   const rScale = d3.scaleSqrt().domain([rMin, rMax]).range(isMobile ? [6, 22] : [9, 32]);
 
-  // FIX 3: Same guard for edge thickness scale.
-  const lMin = 1;
-  const lMax = maxLinkCount > lMin ? maxLinkCount : lMin + 1;
-  const lScale = d3.scaleLinear().domain([lMin, lMax]).range([1.5, 7]);
+  // FIX 2: Edge thickness scale — domain starts at 0 so even a single-count
+  // edge gets meaningful width, and differences between counts are visible.
+  // We also guard against all-equal counts by ensuring max > 0.
+  const lMax = Math.max(maxLinkCount, 1);
+  const lScale = d3.scaleLinear().domain([0, lMax]).range([1.5, 8]);
 
   const g = svg.append('g');
   svg.call(d3.zoom().scaleExtent([0.25, 5]).on('zoom', e => g.attr('transform', e.transform)));
@@ -870,11 +872,13 @@ function buildGraph(obs) {
     .on('mouseenter', (ev,d) => showTooltip(ev,d))
     .on('mousemove', moveTooltip)
     .on('mouseleave', hideTooltip);
-  nodeSel.filter(d=>d.type==='insect').append('circle')
+
+  // FIX 1: Plants → green circles, insects → brown rectangles (swapped from original)
+  nodeSel.filter(d=>d.type==='plant').append('circle')
     .attr('r', d=>rScale(d.count))
     .attr('fill','#2d5a1b').attr('fill-opacity',0.88)
     .attr('stroke','#1a3a0f').attr('stroke-width',0.5);
-  nodeSel.filter(d=>d.type==='plant').each(function(d) {
+  nodeSel.filter(d=>d.type==='insect').each(function(d) {
     const r = rScale(d.count);
     d3.select(this).append('rect')
       .attr('width', r*2.4).attr('height', r*1.6)
@@ -882,11 +886,12 @@ function buildGraph(obs) {
       .attr('fill','#7a4f1d').attr('fill-opacity',0.88)
       .attr('stroke','#4a2f0d').attr('stroke-width',0.5);
   });
+
   const labelSize = isMobile ? '8px' : '10px';
   nodeSel.append('text')
     .text(d => d.id.length > (isMobile ? 14 : 20) ? d.id.slice(0, isMobile ? 12 : 18)+'…' : d.id)
     .attr('text-anchor','middle')
-    .attr('dy', d => { const r = rScale(d.count); return d.type==='insect' ? r+14 : r*0.8+14; })
+    .attr('dy', d => { const r = rScale(d.count); return d.type==='plant' ? r+14 : r*0.8+14; })
     .attr('fill','var(--text-primary)').attr('font-size', labelSize).attr('font-family','DM Mono, monospace')
     .attr('pointer-events','none');
   simulation = d3.forceSimulation(nodes)
@@ -901,13 +906,11 @@ function buildGraph(obs) {
   svg.on('click', () => document.getElementById('detail-card').classList.remove('visible'));
 }
 
-// dominantActivity now receives acts with lowercase keys (after Fix 1),
-// so comparisons and CSS class names all line up correctly.
 function dominantActivity(acts) {
   if (!acts) return 'mixed';
   const valid = Object.entries(acts).filter(([k]) => k && k !== 'unknown');
   if (!valid.length) return 'mixed';
-  if (valid.length === 1) return valid[0][0]; // already lowercase
+  if (valid.length === 1) return valid[0][0];
   const total = valid.reduce((s,[,v])=>s+v,0);
   const [top] = valid.sort((a,b)=>b[1]-a[1]);
   return (top[1]/total > 0.65) ? top[0] : 'mixed';
@@ -939,7 +942,6 @@ function showDetail(d, obs) {
   actsEl.innerHTML = '';
   Object.entries(acts).sort((a,b)=>b[1]-a[1]).forEach(([act,cnt]) => {
     const b = document.createElement('span');
-    // Use lowercase for CSS class matching
     b.className = `act-badge ${act.toLowerCase()}`;
     b.textContent = `${act} ${cnt}`;
     actsEl.appendChild(b);
@@ -982,7 +984,10 @@ function buildMap(obs) {
   const valid = obs.filter(o => o.lat && o.lon);
   if (!valid.length) return;
   const markers = valid.map(o => {
-    const color = ACT_COLORS[(o.activity || '').toLowerCase()] || '#6b6a62';
+    // FIX 3: Normalize to lowercase before lookup so "Feeding", "FEEDING",
+    // "feeding" all resolve correctly. Fall back to gray for blank/unknown.
+    const actKey = (o.activity || '').trim().toLowerCase();
+    const color = ACT_COLORS[actKey] || '#6b6a62';
     const marker = L.circleMarker([o.lat, o.lon], {
       radius: 6,
       fillColor: color,
@@ -990,8 +995,8 @@ function buildMap(obs) {
       weight: 2,
       fillOpacity: 0.9
     });
-    const actBadge = o.activity
-      ? `<span class="popup-act" style="background:${color}18;color:${color}">${o.activity}</span>`
+    const actBadge = actKey && ACT_COLORS[actKey]
+      ? `<span class="popup-act" style="background:${color}28;color:${color}">${o.activity}</span>`
       : '';
     marker.bindPopup(
       '<div class="popup-inner">' +
@@ -1071,7 +1076,6 @@ function renderTableRows(rows, headers) {
     const tr = document.createElement('tr');
     row.forEach((cell, i) => {
       const td = document.createElement('td');
-      // Format date columns that came through as JS Date objects
       const rawVal = (i === dateCol && cell instanceof Date) ? formatDate(cell) : cell;
       const val = rawVal != null ? rawVal.toString().trim() : '';
       if (i === urlCol && val && val.startsWith('http')) {
