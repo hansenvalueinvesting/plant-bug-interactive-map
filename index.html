@@ -513,6 +513,21 @@ document.getElementById('file-input').addEventListener('change', e => {
   reader.readAsBinaryString(file);
 });
 
+// Auto-load the bundled example sheet on first load so the page isn't empty.
+document.addEventListener('DOMContentLoaded', async () => {
+  try {
+    const res = await fetch('example-sheet-formatting.xlsx');
+    if (!res.ok) return;
+    const buf = await res.arrayBuffer();
+    const wb = XLSX.read(buf, {type:'array', cellDates:true});
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const raw = XLSX.utils.sheet_to_json(ws, {defval:'-'});
+    processData(raw);
+    document.getElementById('upload-label').classList.add('has-data');
+    document.getElementById('upload-text').textContent = 'example-sheet-formatting.xlsx';
+  } catch (_) { /* leave empty state on failure */ }
+});
+
 function processData(raw) {
   allData = raw.map(r => ({
     url:       r[COL.url] || '-',
