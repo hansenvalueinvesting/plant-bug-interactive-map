@@ -8,10 +8,14 @@
 
   const app = initializeApp({ databaseURL: "https://github-analytics-9bd0b-default-rtdb.firebaseio.com" }, "analytics");
   const db = getDatabase(app);
-  const APP_KEY = "plant-bug-interactive-map"; 
+  const APP_KEY = "plant-bug-interactive-map";
 
-  runTransaction(ref(db, `visits/${APP_KEY}`), n => (n || 0) + 1);
-  runTransaction(ref(db, `visits/total`),      n => (n || 0) + 1);
+  function bumpVisits() {
+    runTransaction(ref(db, `visits/${APP_KEY}`), n => (n || 0) + 1);
+    runTransaction(ref(db, `visits/total`),      n => (n || 0) + 1);
+  }
+  bumpVisits();
+  window.trackVisit = bumpVisits;
 </script>
   
 <meta charset="UTF-8"/>
@@ -563,6 +567,7 @@ document.getElementById('file-input').addEventListener('change', e => {
     document.getElementById('upload-label').classList.add('has-data');
     document.getElementById('upload-text').textContent = file.name;
     e.target.value = '';
+    window.trackVisit?.();
   };
   reader.readAsBinaryString(file);
 });
