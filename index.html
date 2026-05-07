@@ -140,6 +140,7 @@
   }
   .panel { display: none; flex: 1; overflow: hidden; }
   .panel.active { display: flex; }
+  body:not(.tab-graph) .graph-only { display: none; }
 
   /* ── Sidebar ── */
   .sidebar {
@@ -338,7 +339,7 @@
   .popup-activity { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 500; margin-top: 4px; }
 </style>
 </head>
-<body>
+<body class="tab-graph">
 
 <header>
   <div class="wordmark"><span>insect–plant</span> · explorer</div>
@@ -367,68 +368,68 @@
 <div class="main">
 
   <!-- ── GRAPH PANEL ── -->
-  <div class="panel active" id="panel-graph" style="flex-direction:column">
-    <div style="display:flex;flex:1;overflow:hidden">
-      <!-- Sidebar -->
-      <div class="sidebar">
-        <div class="sidebar-section">
-          <div class="sidebar-label">Activity type</div>
-          <div class="legend-item" data-activity="Feeding">
-            <div class="legend-dot" style="background:var(--feeding)"></div>Feeding
-          </div>
-          <div class="legend-item" data-activity="Resting">
-            <div class="legend-dot" style="background:var(--resting)"></div>Resting
-          </div>
-          <div class="legend-item" data-activity="Moving">
-            <div class="legend-dot" style="background:var(--moving)"></div>Moving
-          </div>
-          <div class="legend-item" data-activity="-">
-            <div class="legend-dot" style="background:var(--unknown)"></div>Unknown
-          </div>
-        </div>
+  <!-- Sidebar (shared across tabs) -->
+  <div class="sidebar">
+    <div class="sidebar-section graph-only">
+      <div class="sidebar-label">Activity type</div>
+      <div class="legend-item" data-activity="Feeding">
+        <div class="legend-dot" style="background:var(--feeding)"></div>Feeding
+      </div>
+      <div class="legend-item" data-activity="Resting">
+        <div class="legend-dot" style="background:var(--resting)"></div>Resting
+      </div>
+      <div class="legend-item" data-activity="Moving">
+        <div class="legend-dot" style="background:var(--moving)"></div>Moving
+      </div>
+      <div class="legend-item" data-activity="-">
+        <div class="legend-dot" style="background:var(--unknown)"></div>Unknown
+      </div>
+    </div>
 
-        <div class="sidebar-section">
-          <div class="sidebar-label">Node type</div>
-          <div class="legend-item" style="cursor:default">
-            <div class="legend-dot" style="background:#1a1917;border:2px solid #1a1917"></div>Insect taxon
-          </div>
-          <div class="legend-item" style="cursor:default">
-            <div class="legend-rect" style="background:#e8f4ee;border:1.5px solid var(--accent)"></div>Host plant
-          </div>
-          <div class="sidebar-label" style="margin-top:12px">Node size = observations</div>
-          <div class="size-guide">
-            <div>
-              <div class="size-bubble" style="width:10px;height:10px;margin:0 auto 2px"></div>
-              <div class="size-label">1</div>
-            </div>
-            <div>
-              <div class="size-bubble" style="width:16px;height:16px;margin:0 auto 2px"></div>
-              <div class="size-label">5</div>
-            </div>
-            <div>
-              <div class="size-bubble" style="width:24px;height:24px;margin:0 auto 2px"></div>
-              <div class="size-label">10+</div>
-            </div>
-          </div>
+    <div class="sidebar-section graph-only">
+      <div class="sidebar-label">Node type</div>
+      <div class="legend-item" style="cursor:default">
+        <div class="legend-dot" style="background:#1a1917;border:2px solid #1a1917"></div>Insect taxon
+      </div>
+      <div class="legend-item" style="cursor:default">
+        <div class="legend-rect" style="background:#e8f4ee;border:1.5px solid var(--accent)"></div>Host plant
+      </div>
+      <div class="sidebar-label" style="margin-top:12px">Node size = observations</div>
+      <div class="size-guide">
+        <div>
+          <div class="size-bubble" style="width:10px;height:10px;margin:0 auto 2px"></div>
+          <div class="size-label">1</div>
         </div>
-
-        <div class="sidebar-section">
-          <div class="sidebar-label">Filter: arthropod group</div>
-          <div class="filter-group" id="group-filters"></div>
+        <div>
+          <div class="size-bubble" style="width:16px;height:16px;margin:0 auto 2px"></div>
+          <div class="size-label">5</div>
         </div>
-
-        <div class="sidebar-section">
-          <div class="sidebar-label">Filter: activity</div>
-          <div class="filter-group" id="activity-filters"></div>
-        </div>
-
-        <div class="sidebar-section" style="margin-top:auto">
-          <button id="reset-btn" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:var(--radius);background:transparent;cursor:pointer;font-family:var(--mono);font-size:12px;color:var(--text-2);transition:all 0.15s" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='transparent'">
-            Reset view
-          </button>
+        <div>
+          <div class="size-bubble" style="width:24px;height:24px;margin:0 auto 2px"></div>
+          <div class="size-label">10+</div>
         </div>
       </div>
+    </div>
 
+    <div class="sidebar-section">
+      <div class="sidebar-label">Filter: arthropod group</div>
+      <div class="filter-group" id="group-filters"></div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">Filter: activity</div>
+      <div class="filter-group" id="activity-filters"></div>
+    </div>
+
+    <div class="sidebar-section graph-only" style="margin-top:auto">
+      <button id="reset-btn" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:var(--radius);background:transparent;cursor:pointer;font-family:var(--mono);font-size:12px;color:var(--text-2);transition:all 0.15s" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='transparent'">
+        Reset view
+      </button>
+    </div>
+  </div>
+
+  <div class="panel active" id="panel-graph" style="flex-direction:column">
+    <div style="display:flex;flex:1;overflow:hidden">
       <!-- Graph canvas -->
       <div class="canvas-wrap" id="graph-wrap">
         <div class="empty-state" id="empty-graph">
@@ -626,7 +627,7 @@ function buildFilters(groups) {
     label.innerHTML = `<input type="checkbox" checked data-group="${g}"/> ${g}`;
     label.querySelector('input').addEventListener('change', function() {
       this.checked ? activeGroups.add(g) : activeGroups.delete(g);
-      buildGraph();
+      onFiltersChanged();
     });
     gWrap.appendChild(label);
   });
@@ -639,7 +640,7 @@ function buildFilters(groups) {
     label.innerHTML = `<input type="checkbox" checked data-activity="${a}"/> ${a === '-' ? 'Unknown' : a}`;
     label.querySelector('input').addEventListener('change', function() {
       this.checked ? activeActivities.add(a) : activeActivities.delete(a);
-      buildGraph();
+      onFiltersChanged();
     });
     aWrap.appendChild(label);
   });
@@ -900,7 +901,7 @@ function hideTooltip() {
 // GEO MAP
 // ═══════════════════════════════════════════════════
 function buildMap() {
-  const pts = allData.filter(d => d.lat && d.lon);
+  const pts = filteredData().filter(d => d.lat && d.lon);
   document.getElementById('empty-map').style.display = pts.length ? 'none' : 'flex';
   document.getElementById('map').style.display = pts.length ? 'block' : 'none';
   if (!pts.length) return;
@@ -954,16 +955,36 @@ document.querySelectorAll('.tab').forEach(tab => {
     document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
     tab.classList.add('active');
     document.getElementById('panel-' + tab.dataset.tab).classList.add('active');
-    if (tab.dataset.tab === 'geo' && leafletMap) setTimeout(()=>leafletMap.invalidateSize(),50);
+    document.body.classList.remove('tab-graph','tab-geo','tab-raw');
+    document.body.classList.add('tab-' + tab.dataset.tab);
+    if (tab.dataset.tab === 'geo' && leafletMap) { setTimeout(()=>leafletMap.invalidateSize(),50); if (allData.length) buildMap(); }
     if (tab.dataset.tab === 'graph' && allData.length) buildGraph();
     if (tab.dataset.tab === 'raw' && rawSheet.length && !rawRendered) buildRawTable();
   });
 });
 
+function filteredRawSheet() {
+  return rawSheet.filter(r => {
+    const g = clean(r[COL.group]);
+    const a = clean(r[COL.activity]);
+    return (g === '-' || activeGroups.has(g)) && activeActivities.has(a);
+  });
+}
+
+function onFiltersChanged() {
+  if (allData.length) {
+    buildGraph();
+    buildMap();
+  }
+  rawRendered = false;
+  if (document.body.classList.contains('tab-raw') && rawSheet.length) buildRawTable();
+}
+
 function buildRawTable() {
   const wrap = document.getElementById('raw-table-wrap');
   const empty = document.getElementById('empty-raw');
   if (empty) empty.remove();
+  const rows = filteredRawSheet();
   const cols = Object.keys(rawSheet[0] || {});
   const escape = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const renderCell = v => {
@@ -980,7 +1001,7 @@ function buildRawTable() {
   let html = '<table class="raw-table"><thead><tr>';
   for (const c of cols) html += `<th>${escape(c)}</th>`;
   html += '</tr></thead><tbody>';
-  for (const row of rawSheet) {
+  for (const row of rows) {
     html += '<tr>';
     for (const c of cols) html += `<td>${renderCell(row[c])}</td>`;
     html += '</tr>';
