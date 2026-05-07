@@ -794,6 +794,8 @@ function buildGraph() {
     .force('link', d3.forceLink(links).id(d => d.id).distance(d => 80 + rScale(d.source.count||1) + rScale(d.target.count||1)).strength(0.6))
     .force('charge', d3.forceManyBody().strength(-200))
     .force('center', d3.forceCenter(W/2, H/2))
+    .force('x', d3.forceX(W/2).strength(0.08))
+    .force('y', d3.forceY(H/2).strength(0.08))
     .force('collision', d3.forceCollide().radius(d => rScale(d.count) + 20))
     .on('tick', () => {
       link
