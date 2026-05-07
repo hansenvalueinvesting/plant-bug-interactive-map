@@ -723,8 +723,7 @@ function buildGraph() {
 
   // Zoom
   const g = svg.append('g');
-  const zoom = d3.zoom().scaleExtent([0.1, 4]).on('zoom', e => g.attr('transform', e.transform));
-  svg.call(zoom);
+  svg.call(d3.zoom().scaleExtent([0.2, 4]).on('zoom', e => g.attr('transform', e.transform)));
 
   // Links
   const link = g.append('g').selectAll('line')
@@ -800,29 +799,7 @@ function buildGraph() {
         .attr('x1', d => d.source.x).attr('y1', d => d.source.y)
         .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
       node.attr('transform', d => `translate(${d.x},${d.y})`);
-    })
-    .on('end', () => fitToView());
-
-  function fitToView(animate) {
-    if (!nodes.length) return;
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    nodes.forEach(d => {
-      const r = rScale(d.count) + 30;
-      if (d.x - r < minX) minX = d.x - r;
-      if (d.y - r < minY) minY = d.y - r;
-      if (d.x + r > maxX) maxX = d.x + r;
-      if (d.y + r > maxY) maxY = d.y + r;
     });
-    const bw = maxX - minX, bh = maxY - minY;
-    if (!bw || !bh) return;
-    const pad = 40;
-    const scale = Math.min((W - pad*2) / bw, (H - pad*2) / bh, 1);
-    const tx = (W - scale*(minX + maxX)) / 2;
-    const ty = (H - scale*(minY + maxY)) / 2;
-    const t = d3.zoomIdentity.translate(tx, ty).scale(scale);
-    const sel = animate ? svg.transition().duration(400) : svg;
-    sel.call(zoom.transform, t);
-  }
 
   // Click on background deselects
   svg.on('click', () => {
@@ -833,7 +810,11 @@ function buildGraph() {
   });
 
   // Reset
-  document.getElementById('reset-btn').onclick = () => fitToView(true);
+  document.getElementById('reset-btn').onclick = () => {
+    svg.transition().duration(400).call(
+      d3.zoom().transform, d3.zoomIdentity.translate(0,0).scale(1)
+    );
+  };
 
   function dragStart(event, d) {
     if (!event.active) simulation.alphaTarget(0.3).restart();
