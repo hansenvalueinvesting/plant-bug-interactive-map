@@ -631,8 +631,11 @@ function processData(raw) {
     };
   }).filter(d => d.plant !== '-' || d.insect !== '-');
 
-  // Collect unique groups
-  const groups = [...new Set(allData.map(d => d.group).filter(g => g !== '-'))];
+  // Collect unique groups (include '-' so blank-group rows are explicitly
+  // filterable via an "Unknown" checkbox, otherwise unchecking every group
+  // still wouldn't hide them).
+  const groupsRaw = [...new Set(allData.map(d => d.group))];
+  const groups = groupsRaw.sort((a, b) => (a === '-' ? 1 : b === '-' ? -1 : a.localeCompare(b)));
   activeGroups = new Set(groups);
 
   rebuildActivityColors();
@@ -673,7 +676,7 @@ function buildFilters(groups) {
   groups.forEach(g => {
     const label = document.createElement('label');
     label.className = 'filter-check';
-    label.innerHTML = `<input type="checkbox" checked data-group="${g.replace(/"/g,'&quot;')}"/> ${g}`;
+    label.innerHTML = `<input type="checkbox" checked data-group="${g.replace(/"/g,'&quot;')}"/> ${g === '-' ? 'Unknown' : g}`;
     label.querySelector('input').addEventListener('change', function() {
       this.checked ? activeGroups.add(g) : activeGroups.delete(g);
       refreshSelectAll('group-select-all', '#group-filters input[data-group]');
@@ -731,7 +734,7 @@ function refreshActivityAvailability() {
   // Activities present in rows that pass the current group filter
   const allowed = new Set(
     allData
-      .filter(d => d.group === '-' || activeGroups.has(d.group))
+      .filter(d => activeGroups.has(d.group))
       .flatMap(d => d.activities)
   );
   document.querySelectorAll('#activity-filters input[data-activity]').forEach(input => {
@@ -744,7 +747,7 @@ function refreshActivityAvailability() {
 
 function filteredData() {
   return allData.filter(d =>
-    (d.group === '-' || activeGroups.has(d.group)) &&
+    activeGroups.has(d.group) &&
     d.activities.some(a => activeActivities.has(a))
   );
 }
@@ -1082,7 +1085,7 @@ function filteredRawSheet() {
   return rawSheet.filter(r => {
     const g = clean(r[COL.group]);
     const acts = splitActivities(clean(r[COL.activity]));
-    return (g === '-' || activeGroups.has(g)) &&
+    return activeGroups.has(g) &&
            acts.some(a => activeActivities.has(a));
   });
 }
