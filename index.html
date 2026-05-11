@@ -225,24 +225,12 @@
   .filter-check input { accent-color: var(--accent); cursor: pointer; }
   .filter-check.filter-empty { opacity: 0.35; cursor: not-allowed; }
   .filter-check.filter-empty input { cursor: not-allowed; }
-  .filter-sub {
-    display: none;
-    margin: 2px 0 6px 18px;
-    padding-left: 8px;
-    border-left: 1px solid var(--border);
+  .filter-select-all {
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 6px;
+    margin-bottom: 4px;
+    color: var(--text-2);
   }
-  .filter-sub.open { display: block; }
-  .filter-sub .filter-check { font-size: 11px; padding: 2px 0; color: var(--text-2); }
-  .filter-bucket-row { display: flex; align-items: center; gap: 4px; }
-  .filter-caret {
-    cursor: pointer;
-    font-size: 10px;
-    color: var(--text-3);
-    width: 12px;
-    user-select: none;
-    transition: transform 0.15s;
-  }
-  .filter-caret.open { transform: rotate(90deg); }
 
   /* ── Canvas area ── */
   .canvas-wrap {
@@ -527,11 +515,7 @@ let allData = [];
 let rawSheet = [];
 let rawRendered = false;
 let activeGroups = new Set();
-let activeActivities = new Set(['Feeding','Resting','Moving','-','Other']);
-// Granular per-string filter. Empty = no narrowing; a bucket without any of
-// its sub-strings in this set still matches all of them. Populated by user
-// drilling into a bucket's sub-list.
-let activeActivityStrings = new Set();
+let activeActivities = new Set();  // populated from data on load
 let selectedNode = null;
 let simulation = null;
 let leafletMap = null;
@@ -551,25 +535,37 @@ const COL = {
   phenology:'🌱 Host plant phenology',
 };
 
-const ACTIVITY_BUCKETS = [
-  { id:'Feeding', label:'Feeding', color:'#c1440e', bg:'#fdf0eb',
-    test: a => /feeding|foraging|leaf mine|gall|preying/i.test(a) },
-  { id:'Resting', label:'Resting', color:'#2d6a4f', bg:'#e8f4ee',
-    test: a => /^resting$/i.test(a) },
-  { id:'Moving',  label:'Moving',  color:'#1d5fa0', bg:'#e8f0fb',
-    test: a => /^moving$/i.test(a) },
-  { id:'-',       label:'Unknown', color:'#8a8880', bg:'#f2f1ed',
-    test: a => a === '-' },
-  { id:'Other',   label:'Other',   color:'#7a4a93', bg:'#efeaf5',
-    test: () => true },
+// One distinct color per raw activity string. Palette assigned in the order
+// activities are first encountered (sorted alphabetically for stability) when
+// the data loads. '-' is always gray.
+const ACTIVITY_PALETTE = [
+  '#c1440e','#2d6a4f','#1d5fa0','#7a4a93','#b5651d','#0f8b8d','#d4a017',
+  '#8b3a62','#3c6e47','#a64b2a','#4a5fa5','#9d6b3c','#c43a6e','#2f8f6f',
+  '#7c3aed','#e07a5f','#386641','#bc4749','#5f8b95','#a5a58d',
 ];
+const ACTIVITY_COLOR = {};   // raw activity string -> hex color (built on data load)
+const ACTIVITY_BG    = {};   // raw activity string -> light bg color (built on data load)
 
-function bucketOf(activity) {
-  return ACTIVITY_BUCKETS.find(b => b.test(activity)).id;
+function hexToBg(hex) {
+  const r = parseInt(hex.slice(1,3),16);
+  const g = parseInt(hex.slice(3,5),16);
+  const b = parseInt(hex.slice(5,7),16);
+  return `rgb(${Math.round(r + (255-r)*0.88)}, ${Math.round(g + (255-g)*0.88)}, ${Math.round(b + (255-b)*0.88)})`;
 }
 
-const ACTIVITY_COLOR = Object.fromEntries(ACTIVITY_BUCKETS.map(b => [b.id, b.color]));
-const ACTIVITY_BG    = Object.fromEntries(ACTIVITY_BUCKETS.map(b => [b.id, b.bg]));
+function rebuildActivityColors() {
+  Object.keys(ACTIVITY_COLOR).forEach(k => delete ACTIVITY_COLOR[k]);
+  Object.keys(ACTIVITY_BG).forEach(k => delete ACTIVITY_BG[k]);
+  const unique = [...new Set(allData.flatMap(d => d.activities))]
+    .filter(a => a !== '-').sort((a,b) => a.localeCompare(b));
+  unique.forEach((a, i) => {
+    const c = ACTIVITY_PALETTE[i % ACTIVITY_PALETTE.length];
+    ACTIVITY_COLOR[a] = c;
+    ACTIVITY_BG[a]    = hexToBg(c);
+  });
+  ACTIVITY_COLOR['-'] = '#8a8880';
+  ACTIVITY_BG['-']    = '#f2f1ed';
+}
 
 // ═══════════════════════════════════════════════════
 // FILE UPLOAD
@@ -632,7 +628,10 @@ function processData(raw) {
   // Collect unique groups
   const groups = [...new Set(allData.map(d => d.group).filter(g => g !== '-'))];
   activeGroups = new Set(groups);
-  activeActivityStrings = new Set();
+
+  rebuildActivityColors();
+  const allActivities = [...new Set(allData.flatMap(d => d.activities))];
+  activeActivities = new Set(allActivities);
   buildFilters(groups);
 
   updateHeaderStats();
@@ -655,138 +654,106 @@ function splitActivities(s) {
 // FILTERS
 // ═══════════════════════════════════════════════════
 function buildFilters(groups) {
+  // ── Arthropod groups ──
   const gWrap = document.getElementById('group-filters');
   gWrap.innerHTML = '';
+  const gAll = makeSelectAllRow('group-select-all', () => {
+    const checked = document.getElementById('group-select-all').checked;
+    activeGroups = new Set(checked ? groups : []);
+    gWrap.querySelectorAll('input[data-group]').forEach(i => i.checked = checked);
+    onFiltersChanged();
+  });
+  gWrap.appendChild(gAll);
   groups.forEach(g => {
     const label = document.createElement('label');
     label.className = 'filter-check';
-    label.innerHTML = `<input type="checkbox" checked data-group="${g}"/> ${g}`;
+    label.innerHTML = `<input type="checkbox" checked data-group="${g.replace(/"/g,'&quot;')}"/> ${g}`;
     label.querySelector('input').addEventListener('change', function() {
       this.checked ? activeGroups.add(g) : activeGroups.delete(g);
+      refreshSelectAll('group-select-all', '#group-filters input[data-group]');
       onFiltersChanged();
     });
     gWrap.appendChild(label);
   });
 
-  buildActivityFilters();
-  buildActivityLegend();
+  // ── Activities ──
+  const aWrap = document.getElementById('activity-filters');
+  aWrap.innerHTML = '';
+  const activities = [...new Set(allData.flatMap(d => d.activities))]
+    .sort((a, b) => (a === '-' ? 1 : b === '-' ? -1 : a.localeCompare(b)));
+  const aAll = makeSelectAllRow('activity-select-all', () => {
+    const checked = document.getElementById('activity-select-all').checked;
+    activeActivities = new Set(checked ? activities : []);
+    aWrap.querySelectorAll('input[data-activity]').forEach(i => i.checked = checked);
+    onFiltersChanged();
+  });
+  aWrap.appendChild(aAll);
+  activities.forEach(a => {
+    const label = document.createElement('label');
+    label.className = 'filter-check';
+    const color = ACTIVITY_COLOR[a] || ACTIVITY_COLOR['-'];
+    label.innerHTML = `<input type="checkbox" checked data-activity="${a.replace(/"/g,'&quot;')}"/> <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${color};margin:0 4px 0 2px;vertical-align:middle"></span>${a === '-' ? 'Unknown' : a}`;
+    label.querySelector('input').addEventListener('change', function() {
+      this.checked ? activeActivities.add(a) : activeActivities.delete(a);
+      refreshSelectAll('activity-select-all', '#activity-filters input[data-activity]');
+      onFiltersChanged();
+    });
+    aWrap.appendChild(label);
+  });
+
+  buildActivityLegend(activities);
   refreshActivityAvailability();
 }
 
-// Map of bucket id -> Set of raw activity strings present in allData
-function bucketStringIndex() {
-  const idx = new Map(ACTIVITY_BUCKETS.map(b => [b.id, new Set()]));
-  allData.forEach(d => d.activities.forEach(a => idx.get(bucketOf(a)).add(a)));
-  return idx;
+function makeSelectAllRow(id, onToggle) {
+  const label = document.createElement('label');
+  label.className = 'filter-check filter-select-all';
+  label.innerHTML = `<input type="checkbox" checked id="${id}"/> <b>Select all</b>`;
+  label.querySelector('input').addEventListener('change', onToggle);
+  return label;
 }
 
-function buildActivityFilters() {
-  const aWrap = document.getElementById('activity-filters');
-  aWrap.innerHTML = '';
-  const idx = bucketStringIndex();
-
-  ACTIVITY_BUCKETS.forEach(b => {
-    const subStrings = [...idx.get(b.id)].sort();
-    const row = document.createElement('div');
-    row.className = 'filter-bucket-row';
-    row.style.flexDirection = 'column';
-    row.style.alignItems = 'stretch';
-
-    const top = document.createElement('div');
-    top.style.display = 'flex';
-    top.style.alignItems = 'center';
-    top.style.gap = '4px';
-
-    const caret = document.createElement('span');
-    caret.className = 'filter-caret';
-    caret.textContent = subStrings.length > 1 ? '▶' : '';
-    caret.style.visibility = subStrings.length > 1 ? 'visible' : 'hidden';
-
-    const label = document.createElement('label');
-    label.className = 'filter-check';
-    label.style.flex = '1';
-    label.innerHTML = `<input type="checkbox" ${activeActivities.has(b.id) ? 'checked' : ''} data-activity="${b.id}"/> <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${b.color};margin:0 4px 0 2px"></span>${b.label}`;
-    label.querySelector('input').addEventListener('change', function() {
-      this.checked ? activeActivities.add(b.id) : activeActivities.delete(b.id);
-      onFiltersChanged();
-    });
-
-    top.appendChild(caret);
-    top.appendChild(label);
-    row.appendChild(top);
-
-    if (subStrings.length > 1) {
-      const sub = document.createElement('div');
-      sub.className = 'filter-sub';
-      subStrings.forEach(s => {
-        const sLabel = document.createElement('label');
-        sLabel.className = 'filter-check';
-        const checked = activeActivityStrings.size === 0 || activeActivityStrings.has(s);
-        sLabel.innerHTML = `<input type="checkbox" ${checked ? 'checked' : ''} data-activity-string="${s.replace(/"/g,'&quot;')}"/> ${s === '-' ? 'Unknown' : s}`;
-        sLabel.querySelector('input').addEventListener('change', function() {
-          // First user interaction populates the set with all known strings,
-          // then toggles. This way the default (empty set) means "all".
-          if (activeActivityStrings.size === 0) {
-            allData.forEach(d => d.activities.forEach(x => activeActivityStrings.add(x)));
-          }
-          this.checked ? activeActivityStrings.add(s) : activeActivityStrings.delete(s);
-          onFiltersChanged();
-        });
-        sub.appendChild(sLabel);
-      });
-      row.appendChild(sub);
-
-      caret.addEventListener('click', () => {
-        caret.classList.toggle('open');
-        sub.classList.toggle('open');
-      });
-    }
-
-    aWrap.appendChild(row);
-  });
+function refreshSelectAll(id, childSelector) {
+  const master = document.getElementById(id);
+  if (!master) return;
+  const children = [...document.querySelectorAll(childSelector)];
+  const checkedCount = children.filter(c => c.checked).length;
+  master.checked = checkedCount === children.length;
+  master.indeterminate = checkedCount > 0 && checkedCount < children.length;
 }
 
-function buildActivityLegend() {
+function buildActivityLegend(activities) {
   const wrap = document.getElementById('activity-legend');
   if (!wrap) return;
   wrap.innerHTML = '';
-  const idx = bucketStringIndex();
-  ACTIVITY_BUCKETS.forEach(b => {
-    if (idx.get(b.id).size === 0) return;  // skip buckets with no data
+  activities.forEach(a => {
     const item = document.createElement('div');
     item.className = 'legend-item';
     item.style.cursor = 'default';
-    item.innerHTML = `<div class="legend-dot" style="background:${b.color}"></div>${b.label}`;
+    item.innerHTML = `<div class="legend-dot" style="background:${ACTIVITY_COLOR[a] || ACTIVITY_COLOR['-']}"></div>${a === '-' ? 'Unknown' : a}`;
     wrap.appendChild(item);
   });
 }
 
 function refreshActivityAvailability() {
-  // Buckets present in rows that pass the current group filter
+  // Activities present in rows that pass the current group filter
   const allowed = new Set(
     allData
       .filter(d => d.group === '-' || activeGroups.has(d.group))
-      .flatMap(d => d.activities.map(bucketOf))
+      .flatMap(d => d.activities)
   );
   document.querySelectorAll('#activity-filters input[data-activity]').forEach(input => {
-    const id = input.dataset.activity;
-    const empty = !allowed.has(id);
+    const a = input.dataset.activity;
+    const empty = !allowed.has(a);
     input.disabled = empty;
-    // climb to the .filter-bucket-row wrapper
-    const row = input.closest('.filter-bucket-row');
-    if (row) row.classList.toggle('filter-empty', empty);
-    else input.parentElement.classList.toggle('filter-empty', empty);
+    input.parentElement.classList.toggle('filter-empty', empty);
   });
-}
-
-function activityStringMatches(a) {
-  return activeActivityStrings.size === 0 || activeActivityStrings.has(a);
 }
 
 function filteredData() {
   return allData.filter(d =>
     (d.group === '-' || activeGroups.has(d.group)) &&
-    d.activities.some(a => activeActivities.has(bucketOf(a)) && activityStringMatches(a))
+    d.activities.some(a => activeActivities.has(a))
   );
 }
 
@@ -833,14 +800,12 @@ function buildGraph() {
     const pNode = plantMap.get(pln);
     iNode.count += d.qty;
     pNode.count += d.qty;
-    // Count by bucket so node/link coloring uses the broad category palette.
-    // A row's qty is distributed evenly across its component activities so
-    // a combo like "Hole-feeding, Resting" contributes half to each bucket.
-    const bucketShare = d.qty / d.activities.length;
+    // A row's qty is split evenly across its component activities so a combo
+    // like "Foraging, Resting" contributes half to each tally.
+    const share = d.qty / d.activities.length;
     d.activities.forEach(a => {
-      const b = bucketOf(a);
-      iNode.activities[b] = (iNode.activities[b]||0) + bucketShare;
-      pNode.activities[b] = (pNode.activities[b]||0) + bucketShare;
+      iNode.activities[a] = (iNode.activities[a]||0) + share;
+      pNode.activities[a] = (pNode.activities[a]||0) + share;
     });
 
     const key = `${ins}|||${pln}`;
@@ -848,8 +813,7 @@ function buildGraph() {
     const lnk = linkMap.get(key);
     lnk.count += d.qty;
     d.activities.forEach(a => {
-      const b = bucketOf(a);
-      lnk.activities[b] = (lnk.activities[b]||0) + bucketShare;
+      lnk.activities[a] = (lnk.activities[a]||0) + share;
     });
   });
 
@@ -1066,9 +1030,8 @@ function buildMap() {
   mapMarkers = [];
 
   pts.forEach(d => {
-    const bucket = bucketOf(d.activities[0]);
-    const color = ACTIVITY_COLOR[bucket] || ACTIVITY_COLOR['-'];
-    const bg    = ACTIVITY_BG[bucket]    || ACTIVITY_BG['-'];
+    const color = ACTIVITY_COLOR[d.activities[0]] || ACTIVITY_COLOR['-'];
+    const bg    = ACTIVITY_BG[d.activities[0]]    || ACTIVITY_BG['-'];
     const icon  = L.divIcon({
       html: `<div style="width:12px;height:12px;background:${color};border:2px solid white;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,0.2)"></div>`,
       className: '',
@@ -1116,12 +1079,14 @@ function filteredRawSheet() {
     const g = clean(r[COL.group]);
     const acts = splitActivities(clean(r[COL.activity]));
     return (g === '-' || activeGroups.has(g)) &&
-           acts.some(a => activeActivities.has(bucketOf(a)) && activityStringMatches(a));
+           acts.some(a => activeActivities.has(a));
   });
 }
 
 function onFiltersChanged() {
   refreshActivityAvailability();
+  refreshSelectAll('group-select-all', '#group-filters input[data-group]');
+  refreshSelectAll('activity-select-all', '#activity-filters input[data-activity]');
   if (allData.length) {
     buildGraph();
     buildMap();
