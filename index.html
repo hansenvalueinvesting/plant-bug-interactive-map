@@ -796,8 +796,15 @@ function updateHeaderStats() {
 // ═══════════════════════════════════════════════════
 function buildGraph() {
   const data = filteredData();
-  document.getElementById('empty-graph').style.display = data.length ? 'none' : 'flex';
-  if (!data.length) return;
+  const empty = document.getElementById('empty-graph');
+  empty.style.display = data.length ? 'none' : 'flex';
+  empty.querySelector('p').textContent = allData.length
+    ? 'No observations match the current filters.'
+    : 'Upload a spreadsheet to begin';
+  if (!data.length) {
+    d3.select('#graph-svg').selectAll('*').remove();
+    return;
+  }
 
   const svg = d3.select('#graph-svg');
   svg.selectAll('*').remove();
@@ -856,9 +863,10 @@ function buildGraph() {
     return ACTIVITY_COLOR[best] || ACTIVITY_COLOR['-'];
   }
 
-  // Zoom
+  // Zoom — keep a reference so the Reset button can use the same behavior
   const g = svg.append('g');
-  svg.call(d3.zoom().scaleExtent([0.2, 4]).on('zoom', e => g.attr('transform', e.transform)));
+  const zoom = d3.zoom().scaleExtent([0.2, 4]).on('zoom', e => g.attr('transform', e.transform));
+  svg.call(zoom);
 
   // Links
   const link = g.append('g').selectAll('line')
@@ -944,11 +952,11 @@ function buildGraph() {
     document.getElementById('detail-bar').classList.add('hidden');
   });
 
-  // Reset
+  // Reset — restore default transform on the same zoom behavior, then
+  // reheat the simulation so the layout re-settles.
   document.getElementById('reset-btn').onclick = () => {
-    svg.transition().duration(400).call(
-      d3.zoom().transform, d3.zoomIdentity.translate(0,0).scale(1)
-    );
+    svg.transition().duration(400).call(zoom.transform, d3.zoomIdentity);
+    if (simulation) simulation.alpha(0.8).restart();
   };
 
   function dragStart(event, d) {
@@ -1036,7 +1044,11 @@ function hideTooltip() {
 // ═══════════════════════════════════════════════════
 function buildMap() {
   const pts = filteredData().filter(d => d.lat && d.lon);
-  document.getElementById('empty-map').style.display = pts.length ? 'none' : 'flex';
+  const empty = document.getElementById('empty-map');
+  empty.style.display = pts.length ? 'none' : 'flex';
+  empty.querySelector('p').textContent = allData.length
+    ? 'No observations match the current filters.'
+    : 'Upload a spreadsheet to see locations';
   document.getElementById('map').style.display = pts.length ? 'block' : 'none';
   if (!pts.length) return;
 
