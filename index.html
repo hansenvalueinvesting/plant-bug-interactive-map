@@ -105,6 +105,21 @@
   .upload-zone svg { flex-shrink: 0; }
   #file-input { display: none; }
 
+  .header-btn {
+    padding: 7px 14px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius);
+    background: transparent;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-2);
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .header-btn:hover { background: var(--surface2); color: var(--text); }
+  body:not(.tab-graph) .header-btn.graph-only { display: none; }
+
   .stats-pill {
     display: flex;
     gap: 20px;
@@ -157,6 +172,16 @@
     flex-direction: column;
     overflow-y: auto;
   }
+  .sidebar-right {
+    width: 200px;
+    flex-shrink: 0;
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+  }
+  body:not(.tab-graph) .sidebar-right { display: none; }
   .sidebar-section {
     padding: 16px;
     border-bottom: 1px solid var(--border);
@@ -363,6 +388,8 @@
     <span><b id="stat-plants">0</b> plants</span>
   </div>
 
+  <button id="reset-btn" class="header-btn graph-only" type="button">Reset view</button>
+
   <label class="upload-zone" id="upload-label" for="file-input">
     <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
       <path d="M8 2v9M4 5l4-4 4 4M2 12h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
@@ -380,39 +407,8 @@
 
 <div class="main">
 
-  <!-- ── GRAPH PANEL ── -->
-  <!-- Sidebar (shared across tabs) -->
+  <!-- ── LEFT SIDEBAR: filters only ── -->
   <div class="sidebar">
-    <div class="sidebar-section graph-only">
-      <div class="sidebar-label">Activity type</div>
-      <div id="activity-legend"></div>
-    </div>
-
-    <div class="sidebar-section graph-only">
-      <div class="sidebar-label">Node type</div>
-      <div class="legend-item" style="cursor:default">
-        <div class="legend-dot" style="background:#1a1917;border:2px solid #1a1917"></div>Insect taxon
-      </div>
-      <div class="legend-item" style="cursor:default">
-        <div class="legend-rect" style="background:#e8f4ee;border:1.5px solid var(--accent)"></div>Host plant
-      </div>
-      <div class="sidebar-label" style="margin-top:12px">Node size = observations</div>
-      <div class="size-guide">
-        <div>
-          <div class="size-bubble" style="width:10px;height:10px;margin:0 auto 2px"></div>
-          <div class="size-label">1</div>
-        </div>
-        <div>
-          <div class="size-bubble" style="width:16px;height:16px;margin:0 auto 2px"></div>
-          <div class="size-label">5</div>
-        </div>
-        <div>
-          <div class="size-bubble" style="width:24px;height:24px;margin:0 auto 2px"></div>
-          <div class="size-label">10+</div>
-        </div>
-      </div>
-    </div>
-
     <div class="sidebar-section">
       <div class="sidebar-label">Filter: arthropod group</div>
       <div class="filter-group" id="group-filters"></div>
@@ -421,12 +417,6 @@
     <div class="sidebar-section">
       <div class="sidebar-label">Filter: activity</div>
       <div class="filter-group" id="activity-filters"></div>
-    </div>
-
-    <div class="sidebar-section graph-only" style="margin-top:auto">
-      <button id="reset-btn" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:var(--radius);background:transparent;cursor:pointer;font-family:var(--mono);font-size:12px;color:var(--text-2);transition:all 0.15s" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='transparent'">
-        Reset view
-      </button>
     </div>
   </div>
 
@@ -501,6 +491,39 @@
           <path d="M8 18h32M8 26h32M8 34h32M18 10v28M28 10v28" stroke="#1a1917" stroke-width="1.5"/>
         </svg>
         <p>Upload a spreadsheet to see the raw data</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── RIGHT SIDEBAR: legends (graph tab only) ── -->
+  <div class="sidebar-right">
+    <div class="sidebar-section">
+      <div class="sidebar-label">Activity type</div>
+      <div id="activity-legend"></div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">Node type</div>
+      <div class="legend-item" style="cursor:default">
+        <div class="legend-dot" style="background:#1a1917;border:2px solid #1a1917"></div>Insect taxon
+      </div>
+      <div class="legend-item" style="cursor:default">
+        <div class="legend-rect" style="background:#e8f4ee;border:1.5px solid var(--accent)"></div>Host plant
+      </div>
+      <div class="sidebar-label" style="margin-top:12px">Node size = observations</div>
+      <div class="size-guide">
+        <div>
+          <div class="size-bubble" style="width:10px;height:10px;margin:0 auto 2px"></div>
+          <div class="size-label">1</div>
+        </div>
+        <div>
+          <div class="size-bubble" style="width:16px;height:16px;margin:0 auto 2px"></div>
+          <div class="size-label">5</div>
+        </div>
+        <div>
+          <div class="size-bubble" style="width:24px;height:24px;margin:0 auto 2px"></div>
+          <div class="size-label">10+</div>
+        </div>
       </div>
     </div>
   </div>
