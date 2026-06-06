@@ -712,10 +712,11 @@ function processData(raw) {
       insect:     clean(r[col.insect]),
       group:      clean(r[col.group]),
       activity:   activity,
-      activities: splitActivities(activity),
+      activities: splitMulti(activity),
       stage:      clean(r[col.stage]),
       qty:        parseInt(r[col.qty]) || 1,
       phenology:  clean(r[col.phenology]),
+      phenologies: splitMulti(clean(r[col.phenology])),
     };
   }).filter(d => d.plant !== '-' || d.insect !== '-');
 
@@ -725,7 +726,7 @@ function processData(raw) {
   const groups = [...new Set(allData.map(d => d.group))].sort(filterSort);
   activeGroups = new Set(groups);
   activePlants = new Set(allData.map(d => d.plant));
-  activePhenology = new Set(allData.map(d => d.phenology));
+  activePhenology = new Set(allData.flatMap(d => d.phenologies));
   activeStages = new Set(allData.map(d => d.stage));
 
   rebuildActivityColors();
@@ -759,7 +760,9 @@ function clean(v) {
   return s;
 }
 
-function splitActivities(s) {
+// Split a comma-separated multi-value cell (e.g. activity or phenology) into its
+// individual values, normalizing blanks/'unidentified' to '-'.
+function splitMulti(s) {
   if (!s || s === '-') return ['-'];
   return s.split(',')
     .map(x => x.trim())
@@ -787,7 +790,7 @@ function buildFilters(groups) {
   buildCheckFilter('plant-filters', 'plant-select-all', 'plant', plants,
     () => activePlants, s => activePlants = s);
 
-  const phenologies = [...new Set(allData.map(d => d.phenology))].sort(filterSort);
+  const phenologies = [...new Set(allData.flatMap(d => d.phenologies))].sort(filterSort);
   buildCheckFilter('phenology-filters', 'phenology-select-all', 'phenology', phenologies,
     () => activePhenology, s => activePhenology = s);
 
@@ -884,7 +887,7 @@ function filteredData() {
   return allData.filter(d =>
     activeGroups.has(d.group) &&
     activePlants.has(d.plant) &&
-    activePhenology.has(d.phenology) &&
+    d.phenologies.some(p => activePhenology.has(p)) &&
     activeStages.has(d.stage) &&
     d.activities.some(a => activeActivities.has(a))
   );
@@ -1245,12 +1248,12 @@ function filteredRawSheet() {
   return rawSheet.filter(r => {
     const g = clean(r[resolvedCol.group]);
     const p = clean(r[resolvedCol.plant]);
-    const ph = clean(r[resolvedCol.phenology]);
+    const phs = splitMulti(clean(r[resolvedCol.phenology]));
     const st = clean(r[resolvedCol.stage]);
-    const acts = splitActivities(clean(r[resolvedCol.activity]));
+    const acts = splitMulti(clean(r[resolvedCol.activity]));
     return activeGroups.has(g) &&
            activePlants.has(p) &&
-           activePhenology.has(ph) &&
+           phs.some(ph => activePhenology.has(ph)) &&
            activeStages.has(st) &&
            acts.some(a => activeActivities.has(a));
   });
