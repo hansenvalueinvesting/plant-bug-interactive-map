@@ -444,6 +444,11 @@
       <div class="sidebar-label">Filter: arthropod group</div>
       <div class="filter-group" id="group-filters"></div>
     </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">Filter: plant</div>
+      <div class="filter-group" id="plant-filters"></div>
+    </div>
   </div>
 
   <div class="panel active" id="panel-graph" style="flex-direction:column">
@@ -532,6 +537,7 @@ let rawSheet = [];
 let resolvedCol = {};   // logical field -> actual sheet header (set on data load)
 let rawRendered = false;
 let activeGroups = new Set();
+let activePlants = new Set();
 let activeActivities = new Set();  // populated from data on load
 let selectedNode = null;
 let simulation = null;
@@ -676,6 +682,7 @@ function processData(raw) {
   // still wouldn't hide them).
   const groups = [...new Set(allData.map(d => d.group))].sort(filterSort);
   activeGroups = new Set(groups);
+  activePlants = new Set(allData.map(d => d.plant));
 
   rebuildActivityColors();
   const allActivities = [...new Set(allData.flatMap(d => d.activities))];
@@ -750,6 +757,29 @@ function buildFilters(groups) {
     gWrap.appendChild(label);
   });
 
+  // ── Plants ──
+  const plants = [...new Set(allData.map(d => d.plant))].sort(filterSort);
+  const pWrap = document.getElementById('plant-filters');
+  pWrap.innerHTML = '';
+  const pAll = makeSelectAllRow('plant-select-all', () => {
+    const checked = document.getElementById('plant-select-all').checked;
+    activePlants = new Set(checked ? plants : []);
+    pWrap.querySelectorAll('input[data-plant]').forEach(i => i.checked = checked);
+    onFiltersChanged();
+  });
+  pWrap.appendChild(pAll);
+  plants.forEach(p => {
+    const label = document.createElement('label');
+    label.className = 'filter-check';
+    label.innerHTML = `<input type="checkbox" checked data-plant="${p.replace(/"/g,'&quot;')}"/> ${p === '-' ? 'Unknown' : p}`;
+    label.querySelector('input').addEventListener('change', function() {
+      this.checked ? activePlants.add(p) : activePlants.delete(p);
+      refreshSelectAll('plant-select-all', '#plant-filters input[data-plant]');
+      onFiltersChanged();
+    });
+    pWrap.appendChild(label);
+  });
+
   // ── Activities ──
   const aWrap = document.getElementById('activity-filters');
   aWrap.innerHTML = '';
@@ -812,6 +842,7 @@ function refreshActivityAvailability() {
 function filteredData() {
   return allData.filter(d =>
     activeGroups.has(d.group) &&
+    activePlants.has(d.plant) &&
     d.activities.some(a => activeActivities.has(a))
   );
 }
@@ -1170,8 +1201,10 @@ document.querySelectorAll('.tab').forEach(tab => {
 function filteredRawSheet() {
   return rawSheet.filter(r => {
     const g = clean(r[resolvedCol.group]);
+    const p = clean(r[resolvedCol.plant]);
     const acts = splitActivities(clean(r[resolvedCol.activity]));
     return activeGroups.has(g) &&
+           activePlants.has(p) &&
            acts.some(a => activeActivities.has(a));
   });
 }
@@ -1179,6 +1212,7 @@ function filteredRawSheet() {
 function onFiltersChanged() {
   refreshActivityAvailability();
   refreshSelectAll('group-select-all', '#group-filters input[data-group]');
+  refreshSelectAll('plant-select-all', '#plant-filters input[data-plant]');
   refreshSelectAll('activity-select-all', '#activity-filters input[data-activity]');
   if (allData.length) refreshViews();
 }
