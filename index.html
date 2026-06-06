@@ -319,6 +319,16 @@
     background: var(--surface);
     position: relative;
   }
+  .raw-notice {
+    position: sticky;
+    left: 0;
+    padding: 8px 12px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text2, #5a5850);
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border, #e5e2d9);
+  }
   .raw-table {
     border-collapse: collapse;
     font-family: var(--mono);
@@ -526,7 +536,11 @@ let activeActivities = new Set();  // populated from data on load
 let selectedNode = null;
 let simulation = null;
 let leafletMap = null;
-let mapMarkers = [];
+let markerLayer = null;
+// Views are rebuilt lazily: only the visible tab is re-rendered on data/filter
+// changes; the others are flagged dirty and rebuilt when their tab is opened.
+// This avoids, e.g., recreating thousands of map markers while on the graph tab.
+let graphDirty = false, mapDirty = false;
 
 // Accepted header spellings per logical field, in priority order. Headers are
 // matched after stripping emoji/punctuation and lowercasing, so e.g.
@@ -669,8 +683,22 @@ function processData(raw) {
   buildFilters(groups);
 
   updateHeaderStats();
-  buildGraph();
-  buildMap();
+  refreshViews();
+}
+
+// Returns the currently visible tab key ('graph' | 'geo' | 'raw').
+function activeTab() {
+  return document.querySelector('.tab.active')?.dataset.tab;
+}
+
+// Rebuild the visible view now; flag the others to rebuild when next opened.
+function refreshViews() {
+  graphDirty = mapDirty = true;
+  rawRendered = false;
+  const t = activeTab();
+  if (t === 'geo') { buildMap(); mapDirty = false; }
+  else if (t === 'raw') { if (rawSheet.length) buildRawTable(); }
+  else { buildGraph(); graphDirty = false; }
 }
 
 function clean(v) {
@@ -939,18 +967,32 @@ function buildGraph() {
     });
 
   // Simulation
+  function ticked() {
+    link
+      .attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+      .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+    node.attr('transform', d => `translate(${d.x},${d.y})`);
+  }
   if (simulation) simulation.stop();
   simulation = d3.forceSimulation(nodes)
     .force('link', d3.forceLink(links).id(d => d.id).distance(d => 80 + rScale(d.source.count||1) + rScale(d.target.count||1)).strength(0.6))
     .force('charge', d3.forceManyBody().strength(-200))
     .force('center', d3.forceCenter(W/2, H/2))
-    .force('collision', d3.forceCollide().radius(d => rScale(d.count) + 20))
-    .on('tick', () => {
-      link
-        .attr('x1', d => d.source.x).attr('y1', d => d.source.y)
-        .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
-      node.attr('transform', d => `translate(${d.x},${d.y})`);
-    });
+    .force('collision', d3.forceCollide().radius(d => rScale(d.count) + 20));
+
+  // For large graphs, settle the layout off-screen and render it once, instead
+  // of animating hundreds of DOM updates per tick (the main source of load jank).
+  // Drag still reheats the sim afterwards for interactivity.
+  if (nodes.length > 250) {
+    simulation.stop();
+    const ticks = Math.ceil(Math.log(simulation.alphaMin()) /
+                            Math.log(1 - simulation.alphaDecay()));
+    for (let i = 0; i < ticks; i++) simulation.tick();
+    ticked();
+    simulation.on('tick', ticked);
+  } else {
+    simulation.on('tick', ticked);
+  }
 
   // Click on background deselects
   svg.on('click', () => {
@@ -1061,7 +1103,9 @@ function buildMap() {
   if (!pts.length) return;
 
   if (!leafletMap) {
-    leafletMap = L.map('map', { zoomControl: true });
+    // preferCanvas renders vector markers to a single <canvas> instead of one
+    // DOM node each — essential for thousands of points to stay responsive.
+    leafletMap = L.map('map', { zoomControl: true, preferCanvas: true });
     L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
       attribution: '© OpenStreetMap © CARTO',
       maxZoom: 19
@@ -1069,35 +1113,38 @@ function buildMap() {
   }
 
   // Clear existing markers
-  mapMarkers.forEach(m => m.remove());
-  mapMarkers = [];
+  if (markerLayer) markerLayer.remove();
+  markerLayer = L.layerGroup();
 
   pts.forEach(d => {
     const color = ACTIVITY_COLOR[d.activities[0]] || ACTIVITY_COLOR['-'];
     const bg    = ACTIVITY_BG[d.activities[0]]    || ACTIVITY_BG['-'];
-    const icon  = L.divIcon({
-      html: `<div style="width:12px;height:12px;background:${color};border:2px solid white;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,0.2)"></div>`,
-      className: '',
-      iconSize: [12,12],
-      iconAnchor: [6,6],
+    const marker = L.circleMarker([d.lat, d.lon], {
+      radius: 6,
+      color: '#fff',
+      weight: 2,
+      fillColor: color,
+      fillOpacity: 0.9,
     });
-    const marker = L.marker([d.lat, d.lon], {icon});
-    marker.bindPopup(`
+    // Build the popup lazily on first open so we don't pay the HTML cost for
+    // every one of thousands of markers up front.
+    marker.bindPopup(() => `
       <div class="popup-title">${d.insect !== '-' ? d.insect : d.group}</div>
       <div class="popup-row"><b>Plant:</b> ${d.plant}</div>
       <div class="popup-row"><b>Date:</b> ${d.date ? fmtDate(d.date) : '—'}</div>
       <div class="popup-row"><b>Qty:</b> ${d.qty} &nbsp; <b>Stage:</b> ${d.stage}</div>
       <div><span class="popup-activity" style="background:${bg};color:${color}">${d.activity === '-' ? 'Unknown' : d.activity}</span></div>
     `);
-    marker.addTo(leafletMap);
-    mapMarkers.push(marker);
+    markerLayer.addLayer(marker);
   });
+  markerLayer.addTo(leafletMap);
 
-  const lats = pts.map(d=>d.lat), lons = pts.map(d=>d.lon);
-  leafletMap.fitBounds([
-    [Math.min(...lats)-0.02, Math.min(...lons)-0.02],
-    [Math.max(...lats)+0.02, Math.max(...lons)+0.02]
-  ]);
+  let lat0=Infinity, lat1=-Infinity, lon0=Infinity, lon1=-Infinity;
+  for (const d of pts) {
+    if (d.lat<lat0) lat0=d.lat; if (d.lat>lat1) lat1=d.lat;
+    if (d.lon<lon0) lon0=d.lon; if (d.lon>lon1) lon1=d.lon;
+  }
+  leafletMap.fitBounds([[lat0-0.02, lon0-0.02], [lat1+0.02, lon1+0.02]]);
 }
 
 // ═══════════════════════════════════════════════════
@@ -1111,8 +1158,11 @@ document.querySelectorAll('.tab').forEach(tab => {
     document.getElementById('panel-' + tab.dataset.tab).classList.add('active');
     document.body.classList.remove('tab-graph','tab-geo','tab-raw');
     document.body.classList.add('tab-' + tab.dataset.tab);
-    if (tab.dataset.tab === 'geo' && leafletMap) { setTimeout(()=>leafletMap.invalidateSize(),50); if (allData.length) buildMap(); }
-    if (tab.dataset.tab === 'graph' && allData.length) buildGraph();
+    if (tab.dataset.tab === 'geo') {
+      if (leafletMap) setTimeout(()=>leafletMap.invalidateSize(),50);
+      if (allData.length && mapDirty) { buildMap(); mapDirty = false; }
+    }
+    if (tab.dataset.tab === 'graph' && allData.length && graphDirty) { buildGraph(); graphDirty = false; }
     if (tab.dataset.tab === 'raw' && rawSheet.length && !rawRendered) buildRawTable();
   });
 });
@@ -1130,12 +1180,7 @@ function onFiltersChanged() {
   refreshActivityAvailability();
   refreshSelectAll('group-select-all', '#group-filters input[data-group]');
   refreshSelectAll('activity-select-all', '#activity-filters input[data-activity]');
-  if (allData.length) {
-    buildGraph();
-    buildMap();
-  }
-  rawRendered = false;
-  if (document.body.classList.contains('tab-raw') && rawSheet.length) buildRawTable();
+  if (allData.length) refreshViews();
 }
 
 function buildRawTable() {
@@ -1156,10 +1201,17 @@ function buildRawTable() {
     }
     return escape(s);
   };
-  let html = '<table class="raw-table"><thead><tr>';
+  // Cap the rendered DOM so a huge sheet (tens of thousands of cells) doesn't
+  // freeze the page. Filters narrow the set; the notice shows what's hidden.
+  const MAX_ROWS = 1000;
+  const shown = rows.slice(0, MAX_ROWS);
+  let html = rows.length > MAX_ROWS
+    ? `<div class="raw-notice">Showing first ${MAX_ROWS.toLocaleString()} of ${rows.length.toLocaleString()} rows. Use the filters to narrow the results.</div>`
+    : '';
+  html += '<table class="raw-table"><thead><tr>';
   for (const c of cols) html += `<th>${escape(c)}</th>`;
   html += '</tr></thead><tbody>';
-  for (const row of rows) {
+  for (const row of shown) {
     html += '<tr>';
     for (const c of cols) html += `<td>${renderCell(row[c])}</td>`;
     html += '</tr>';
@@ -1177,11 +1229,16 @@ function fmtDate(d) {
   return d.toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'});
 }
 
-// Rebuild graph on resize
+// Rebuild graph on resize — only if it's the visible tab; otherwise flag it
+// dirty so it re-lays-out (with correct dimensions) when next opened.
 let resizeTimer;
 window.addEventListener('resize', () => {
   clearTimeout(resizeTimer);
-  resizeTimer = setTimeout(() => { if (allData.length) buildGraph(); }, 200);
+  resizeTimer = setTimeout(() => {
+    if (!allData.length) return;
+    if (activeTab() === 'graph') buildGraph();
+    else graphDirty = true;
+  }, 200);
 });
 </script>
 </body>
