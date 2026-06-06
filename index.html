@@ -519,6 +519,7 @@
 // ═══════════════════════════════════════════════════
 let allData = [];
 let rawSheet = [];
+let resolvedCol = {};   // logical field -> actual sheet header (set on data load)
 let rawRendered = false;
 let activeGroups = new Set();
 let activeActivities = new Set();  // populated from data on load
@@ -527,19 +528,42 @@ let simulation = null;
 let leafletMap = null;
 let mapMarkers = [];
 
-const COL = {
-  url:      'Observation URL',
-  date:     'Observation Date',
-  lat:      'Latitude',
-  lon:      'Longitude',
-  plant:    '🌿 Host plant species',
-  insect:   '🆔 Arthropod taxon',
-  group:    '🪲 Arthropod group',
-  activity: '💫 Activity',
-  stage:    '🐛 Developmental stage',
-  qty:      '🧮 Quantity',
-  phenology:'🌱 Host plant phenology',
+// Accepted header spellings per logical field, in priority order. Headers are
+// matched after stripping emoji/punctuation and lowercasing, so e.g.
+// '🌿 Host plant species' normalizes to 'host plant species'. This lets the app
+// read both the example sheet and anecdata exports (which use 'Date'/'Lat'/'Lng'
+// instead of 'Observation Date'/'Latitude'/'Longitude').
+const COL_ALIASES = {
+  url:      ['observation url', 'url'],
+  date:     ['observation date', 'date'],
+  lat:      ['latitude', 'lat'],
+  lon:      ['longitude', 'lng', 'lon', 'long'],
+  plant:    ['host plant species'],
+  insect:   ['arthropod taxon'],
+  group:    ['arthropod group'],
+  activity: ['activity'],
+  stage:    ['developmental stage'],
+  qty:      ['quantity'],
+  phenology:['host plant phenology'],
 };
+
+// Normalize a header for matching: lowercase, drop emoji/punctuation, collapse
+// whitespace.
+function normHeader(h) {
+  return String(h).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+// Map each logical field to the actual header present in the uploaded sheet.
+// Fields with no matching column are left undefined (handled gracefully below).
+function resolveColumns(raw) {
+  const byNorm = new Map(Object.keys(raw[0] || {}).map(h => [normHeader(h), h]));
+  const col = {};
+  for (const [field, aliases] of Object.entries(COL_ALIASES)) {
+    const hit = aliases.find(a => byNorm.has(a));
+    if (hit) col[field] = byNorm.get(hit);
+  }
+  return col;
+}
 
 // One distinct color per raw activity string. Palette assigned in the order
 // activities are first encountered (sorted alphabetically for stability) when
@@ -613,21 +637,23 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 function processData(raw) {
+  const col = resolveColumns(raw);
+  resolvedCol = col;
   allData = raw.map(r => {
-    const activity = clean(r[COL.activity]);
+    const activity = clean(r[col.activity]);
     return {
-      url:        r[COL.url] || '-',
-      date:       r[COL.date] ? new Date(r[COL.date]) : null,
-      lat:        parseFloat(r[COL.lat]) || null,
-      lon:        parseFloat(r[COL.lon]) || null,
-      plant:      clean(r[COL.plant]),
-      insect:     clean(r[COL.insect]),
-      group:      clean(r[COL.group]),
+      url:        r[col.url] || '-',
+      date:       r[col.date] ? new Date(r[col.date]) : null,
+      lat:        parseFloat(r[col.lat]) || null,
+      lon:        parseFloat(r[col.lon]) || null,
+      plant:      clean(r[col.plant]),
+      insect:     clean(r[col.insect]),
+      group:      clean(r[col.group]),
       activity:   activity,
       activities: splitActivities(activity),
-      stage:      clean(r[COL.stage]),
-      qty:        parseInt(r[COL.qty]) || 1,
-      phenology:  clean(r[COL.phenology]),
+      stage:      clean(r[col.stage]),
+      qty:        parseInt(r[col.qty]) || 1,
+      phenology:  clean(r[col.phenology]),
     };
   }).filter(d => d.plant !== '-' || d.insect !== '-');
 
@@ -1093,8 +1119,8 @@ document.querySelectorAll('.tab').forEach(tab => {
 
 function filteredRawSheet() {
   return rawSheet.filter(r => {
-    const g = clean(r[COL.group]);
-    const acts = splitActivities(clean(r[COL.activity]));
+    const g = clean(r[resolvedCol.group]);
+    const acts = splitActivities(clean(r[resolvedCol.activity]));
     return activeGroups.has(g) &&
            acts.some(a => activeActivities.has(a));
   });
