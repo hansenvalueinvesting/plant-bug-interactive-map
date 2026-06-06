@@ -185,6 +185,26 @@
     margin-bottom: 10px;
   }
 
+  /* Collapsible filter dropdowns (closed by default) */
+  .filter-details > summary {
+    margin-bottom: 0;
+    cursor: pointer;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    user-select: none;
+  }
+  .filter-details > summary::-webkit-details-marker { display: none; }
+  .filter-details > summary::before {
+    content: '▸';
+    font-size: 9px;
+    color: var(--text-3);
+    transition: transform 0.12s ease;
+  }
+  .filter-details[open] > summary::before { transform: rotate(90deg); }
+  .filter-details[open] > summary { margin-bottom: 10px; }
+
   /* Legend items */
   .legend-item {
     display: flex;
@@ -436,18 +456,38 @@
     </div>
 
     <div class="sidebar-section">
-      <div class="sidebar-label">Filter: activity</div>
-      <div class="filter-group" id="activity-filters"></div>
+      <details class="filter-details">
+        <summary class="sidebar-label">Filter: activity</summary>
+        <div class="filter-group" id="activity-filters"></div>
+      </details>
     </div>
 
     <div class="sidebar-section">
-      <div class="sidebar-label">Filter: arthropod group</div>
-      <div class="filter-group" id="group-filters"></div>
+      <details class="filter-details">
+        <summary class="sidebar-label">Filter: arthropod group</summary>
+        <div class="filter-group" id="group-filters"></div>
+      </details>
     </div>
 
     <div class="sidebar-section">
-      <div class="sidebar-label">Filter: plant</div>
-      <div class="filter-group" id="plant-filters"></div>
+      <details class="filter-details">
+        <summary class="sidebar-label">Filter: plant</summary>
+        <div class="filter-group" id="plant-filters"></div>
+      </details>
+    </div>
+
+    <div class="sidebar-section">
+      <details class="filter-details">
+        <summary class="sidebar-label">Filter: host plant phenology</summary>
+        <div class="filter-group" id="phenology-filters"></div>
+      </details>
+    </div>
+
+    <div class="sidebar-section">
+      <details class="filter-details">
+        <summary class="sidebar-label">Filter: life cycle / developmental stage</summary>
+        <div class="filter-group" id="stage-filters"></div>
+      </details>
     </div>
   </div>
 
@@ -538,6 +578,8 @@ let resolvedCol = {};   // logical field -> actual sheet header (set on data loa
 let rawRendered = false;
 let activeGroups = new Set();
 let activePlants = new Set();
+let activePhenology = new Set();
+let activeStages = new Set();
 let activeActivities = new Set();  // populated from data on load
 let selectedNode = null;
 let simulation = null;
@@ -683,6 +725,8 @@ function processData(raw) {
   const groups = [...new Set(allData.map(d => d.group))].sort(filterSort);
   activeGroups = new Set(groups);
   activePlants = new Set(allData.map(d => d.plant));
+  activePhenology = new Set(allData.map(d => d.phenology));
+  activeStages = new Set(allData.map(d => d.stage));
 
   rebuildActivityColors();
   const allActivities = [...new Set(allData.flatMap(d => d.activities))];
@@ -735,50 +779,21 @@ function filterSort(a, b) {
 // FILTERS
 // ═══════════════════════════════════════════════════
 function buildFilters(groups) {
-  // ── Arthropod groups ──
-  const gWrap = document.getElementById('group-filters');
-  gWrap.innerHTML = '';
-  const gAll = makeSelectAllRow('group-select-all', () => {
-    const checked = document.getElementById('group-select-all').checked;
-    activeGroups = new Set(checked ? groups : []);
-    gWrap.querySelectorAll('input[data-group]').forEach(i => i.checked = checked);
-    onFiltersChanged();
-  });
-  gWrap.appendChild(gAll);
-  groups.forEach(g => {
-    const label = document.createElement('label');
-    label.className = 'filter-check';
-    label.innerHTML = `<input type="checkbox" checked data-group="${g.replace(/"/g,'&quot;')}"/> ${g === '-' ? 'Unknown' : g}`;
-    label.querySelector('input').addEventListener('change', function() {
-      this.checked ? activeGroups.add(g) : activeGroups.delete(g);
-      refreshSelectAll('group-select-all', '#group-filters input[data-group]');
-      onFiltersChanged();
-    });
-    gWrap.appendChild(label);
-  });
+  // ── Plain text checkbox filters (group / plant / phenology / stage) ──
+  buildCheckFilter('group-filters', 'group-select-all', 'group', groups,
+    () => activeGroups, s => activeGroups = s);
 
-  // ── Plants ──
   const plants = [...new Set(allData.map(d => d.plant))].sort(filterSort);
-  const pWrap = document.getElementById('plant-filters');
-  pWrap.innerHTML = '';
-  const pAll = makeSelectAllRow('plant-select-all', () => {
-    const checked = document.getElementById('plant-select-all').checked;
-    activePlants = new Set(checked ? plants : []);
-    pWrap.querySelectorAll('input[data-plant]').forEach(i => i.checked = checked);
-    onFiltersChanged();
-  });
-  pWrap.appendChild(pAll);
-  plants.forEach(p => {
-    const label = document.createElement('label');
-    label.className = 'filter-check';
-    label.innerHTML = `<input type="checkbox" checked data-plant="${p.replace(/"/g,'&quot;')}"/> ${p === '-' ? 'Unknown' : p}`;
-    label.querySelector('input').addEventListener('change', function() {
-      this.checked ? activePlants.add(p) : activePlants.delete(p);
-      refreshSelectAll('plant-select-all', '#plant-filters input[data-plant]');
-      onFiltersChanged();
-    });
-    pWrap.appendChild(label);
-  });
+  buildCheckFilter('plant-filters', 'plant-select-all', 'plant', plants,
+    () => activePlants, s => activePlants = s);
+
+  const phenologies = [...new Set(allData.map(d => d.phenology))].sort(filterSort);
+  buildCheckFilter('phenology-filters', 'phenology-select-all', 'phenology', phenologies,
+    () => activePhenology, s => activePhenology = s);
+
+  const stages = [...new Set(allData.map(d => d.stage))].sort(filterSort);
+  buildCheckFilter('stage-filters', 'stage-select-all', 'stage', stages,
+    () => activeStages, s => activeStages = s);
 
   // ── Activities ──
   const aWrap = document.getElementById('activity-filters');
@@ -805,6 +820,32 @@ function buildFilters(groups) {
   });
 
   refreshActivityAvailability();
+}
+
+// Build a checkbox filter group of plain text values. getActive/setActive read
+// and replace the backing Set so the "Select all" toggle can swap it wholesale
+// while per-item toggles mutate the current Set.
+function buildCheckFilter(wrapId, allId, attr, values, getActive, setActive) {
+  const wrap = document.getElementById(wrapId);
+  wrap.innerHTML = '';
+  const all = makeSelectAllRow(allId, () => {
+    const checked = document.getElementById(allId).checked;
+    setActive(new Set(checked ? values : []));
+    wrap.querySelectorAll(`input[data-${attr}]`).forEach(i => i.checked = checked);
+    onFiltersChanged();
+  });
+  wrap.appendChild(all);
+  values.forEach(v => {
+    const label = document.createElement('label');
+    label.className = 'filter-check';
+    label.innerHTML = `<input type="checkbox" checked data-${attr}="${v.replace(/"/g,'&quot;')}"/> ${v === '-' ? 'Unknown' : v}`;
+    label.querySelector('input').addEventListener('change', function() {
+      this.checked ? getActive().add(v) : getActive().delete(v);
+      refreshSelectAll(allId, `#${wrapId} input[data-${attr}]`);
+      onFiltersChanged();
+    });
+    wrap.appendChild(label);
+  });
 }
 
 function makeSelectAllRow(id, onToggle) {
@@ -843,6 +884,8 @@ function filteredData() {
   return allData.filter(d =>
     activeGroups.has(d.group) &&
     activePlants.has(d.plant) &&
+    activePhenology.has(d.phenology) &&
+    activeStages.has(d.stage) &&
     d.activities.some(a => activeActivities.has(a))
   );
 }
@@ -1202,9 +1245,13 @@ function filteredRawSheet() {
   return rawSheet.filter(r => {
     const g = clean(r[resolvedCol.group]);
     const p = clean(r[resolvedCol.plant]);
+    const ph = clean(r[resolvedCol.phenology]);
+    const st = clean(r[resolvedCol.stage]);
     const acts = splitActivities(clean(r[resolvedCol.activity]));
     return activeGroups.has(g) &&
            activePlants.has(p) &&
+           activePhenology.has(ph) &&
+           activeStages.has(st) &&
            acts.some(a => activeActivities.has(a));
   });
 }
@@ -1213,6 +1260,8 @@ function onFiltersChanged() {
   refreshActivityAvailability();
   refreshSelectAll('group-select-all', '#group-filters input[data-group]');
   refreshSelectAll('plant-select-all', '#plant-filters input[data-plant]');
+  refreshSelectAll('phenology-select-all', '#phenology-filters input[data-phenology]');
+  refreshSelectAll('stage-select-all', '#stage-filters input[data-stage]');
   refreshSelectAll('activity-select-all', '#activity-filters input[data-activity]');
   if (allData.length) refreshViews();
 }
