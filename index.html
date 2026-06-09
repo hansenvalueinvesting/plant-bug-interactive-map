@@ -394,6 +394,66 @@
   .popup-title { font-weight: 500; margin-bottom: 6px; }
   .popup-row { color: #666; margin-bottom: 3px; }
   .popup-activity { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 500; margin-top: 4px; }
+
+  /* ── About modal ── */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(26, 25, 23, 0.45);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    z-index: 1000;
+  }
+  .modal-overlay.visible { display: flex; }
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    max-width: 640px;
+    width: 100%;
+    max-height: 85vh;
+    overflow-y: auto;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+    padding: 32px 36px;
+    position: relative;
+  }
+  .modal h2 {
+    font-size: 19px;
+    font-weight: 500;
+    color: var(--text);
+    margin-bottom: 16px;
+    padding-right: 32px;
+  }
+  .modal p {
+    color: var(--text-2);
+    font-size: 13.5px;
+    line-height: 1.65;
+    margin-bottom: 14px;
+  }
+  .modal p:last-child { margin-bottom: 0; }
+  .modal a { color: var(--accent); text-decoration: none; }
+  .modal a:hover { text-decoration: underline; }
+  .modal-close {
+    position: absolute;
+    top: 20px;
+    right: 22px;
+    width: 28px;
+    height: 28px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius);
+    background: transparent;
+    color: var(--text-2);
+    cursor: pointer;
+    font-size: 16px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+  }
+  .modal-close:hover { background: var(--surface2); color: var(--text); }
 </style>
 </head>
 <body class="tab-graph">
@@ -414,6 +474,8 @@
     <span id="upload-text">Upload spreadsheet</span>
   </label>
   <input type="file" id="file-input" accept=".xlsx,.xls,.csv"/>
+
+  <button class="header-btn" id="about-btn" type="button">About</button>
 </header>
 
 <div class="tab-bar">
@@ -566,6 +628,18 @@
     </div>
   </div>
 
+</div>
+
+<!-- ── ABOUT MODAL ── -->
+<div class="modal-overlay" id="about-overlay">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="about-title">
+    <button class="modal-close" id="about-close" type="button" aria-label="Close">×</button>
+    <h2 id="about-title">About The EwA Buggy Data Explorer</h2>
+    <p>The EwA Buggy Data Explorer presents arthropod–plant associations as an interactive network. Developed through a collaboration between Hansen Zheng (EwA Analytics Volunteer) and Claire O’Neill (EwA Biodiversity and Climate Participatory Science Program Director), it offers a concise view of interaction patterns, observation frequency, and field-record structure.</p>
+    <p>The visualizer is built on <a href="https://www.anecdata.org/projects/view/ewa-buggy" target="_blank" rel="noopener">EwA Buggy</a>, Earthwise Aware’s field documentation system for recording arthropod–plant associations, including host plant use, activity, abundance, and developmental stage. Its purpose is to support structured ecological analysis of interaction networks.</p>
+    <p>Users can explore the network, geographic context, and raw records, with filters for activity, arthropod group, plant, host plant phenology, and developmental stage. The dataset is generated through standardized protocols and careful documentation by knowledgeable participants, and it is intended for rigorous ecological analysis and interpretation. Readers are encouraged to review the EwA Buggy protocols for methodological context.</p>
+    <p>Questions or feedback? Contact <a href="mailto:participatoryscience@earthwiseaware.org">participatoryscience@earthwiseaware.org</a></p>
+  </div>
 </div>
 
 <script>
@@ -1306,6 +1380,20 @@ function buildRawTable() {
   wrap.innerHTML = html;
   rawRendered = true;
 }
+
+// ═══════════════════════════════════════════════════
+// ABOUT MODAL
+// ═══════════════════════════════════════════════════
+(function () {
+  const overlay = document.getElementById('about-overlay');
+  const open = () => overlay.classList.add('visible');
+  const close = () => overlay.classList.remove('visible');
+  document.getElementById('about-btn').addEventListener('click', open);
+  document.getElementById('about-close').addEventListener('click', close);
+  // Click on the dimmed backdrop (but not the dialog) closes the modal.
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
+})();
 
 // ═══════════════════════════════════════════════════
 // UTILS
