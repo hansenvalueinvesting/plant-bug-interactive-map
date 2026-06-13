@@ -779,7 +779,7 @@ function processData(raw) {
     const activity = clean(r[col.activity]);
     return {
       url:        r[col.url] || '-',
-      date:       r[col.date] ? new Date(r[col.date]) : null,
+      date:       parseDate(r[col.date]),
       lat:        parseFloat(r[col.lat]) || null,
       lon:        parseFloat(r[col.lon]) || null,
       plant:      clean(r[col.plant]),
@@ -1398,6 +1398,17 @@ function buildRawTable() {
 // ═══════════════════════════════════════════════════
 // UTILS
 // ═══════════════════════════════════════════════════
+// Parse a cell value into a Date, or null when it's missing/unparseable.
+// sheet_to_json fills empty cells with the '-' placeholder (see defval), so a
+// blank date column would otherwise become `new Date('-')` — an Invalid Date
+// object that is truthy and slips past the `if (!d)` guards, rendering the
+// literal string "Invalid Date" in popups and corrupting date-range sorts.
+function parseDate(v) {
+  if (v === null || v === undefined || v === '-' || v === '') return null;
+  const d = new Date(v);
+  return isNaN(d) ? null : d;
+}
+
 function fmtDate(d) {
   if (!d) return '—';
   return d.toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'});
