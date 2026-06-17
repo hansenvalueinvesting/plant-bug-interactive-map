@@ -1090,6 +1090,17 @@ function buildGraph() {
     .attr('stroke-opacity', 0.35)
     .attr('stroke-width', d => Math.max(1, Math.sqrt(d.count) * 1.4));
 
+  // Transparent wide hit-area over each link so the thin lines are easy to
+  // hover; carries the tooltip showing observations between the two species.
+  const linkHit = g.append('g').selectAll('line')
+    .data(links).enter().append('line')
+    .attr('stroke', 'transparent')
+    .attr('stroke-width', d => Math.max(10, Math.sqrt(d.count) * 1.4))
+    .style('cursor', 'pointer')
+    .on('mouseover', (event, d) => showLinkTooltip(event, d))
+    .on('mousemove', moveTT)
+    .on('mouseout', hideTooltip);
+
   // Nodes group
   const node = g.append('g').selectAll('g.ngrp')
     .data(nodes).enter().append('g')
@@ -1148,6 +1159,9 @@ function buildGraph() {
   // Simulation
   function ticked() {
     link
+      .attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+      .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+    linkHit
       .attr('x1', d => d.source.x).attr('y1', d => d.source.y)
       .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
     node.attr('transform', d => `translate(${d.x},${d.y})`);
@@ -1248,6 +1262,24 @@ function showTooltip(event, d, links) {
     <div class="tooltip-row"><b>Type:</b> ${d.type === 'insect' ? 'Insect' : 'Host plant'}</div>
     <div class="tooltip-row"><b>Total observations:</b> ${d.count}</div>
     <div class="tooltip-row"><b>Connections:</b> ${connNames.slice(0,3).join(', ')}${connNames.length>3?'…':''}</div>
+    ${actRows}
+  `;
+  tt.classList.add('visible');
+  moveTT(event);
+}
+function showLinkTooltip(event, d) {
+  const tt = document.getElementById('tooltip');
+  const insect = d.source.type === 'insect' ? d.source.id : d.target.id;
+  const plant  = d.source.type === 'plant'  ? d.source.id : d.target.id;
+
+  const actRows = Object.entries(d.activities)
+    .sort((a,b)=>b[1]-a[1])
+    .map(([a,v]) => `<div class="tooltip-row"><b>${a==='-'?'Unknown':a}:</b> ${v} obs</div>`)
+    .join('');
+
+  tt.innerHTML = `
+    <div class="tooltip-title">${insect} ↔ ${plant}</div>
+    <div class="tooltip-row"><b>Observations between these two:</b> ${d.count}</div>
     ${actRows}
   `;
   tt.classList.add('visible');
