@@ -348,6 +348,45 @@
   .map-mode-btn + .map-mode-btn { border-left: 1px solid var(--border, #e0ded8); }
   .map-mode-btn.active { background: #1a1917; color: #fff; }
 
+  /* Clip-location control + drawing overlay */
+  .map-clip-control {
+    position: absolute;
+    top: 50px;               /* sits just below the Pins/Heatmap toggle */
+    right: 12px;
+    z-index: 500;
+    display: none;            /* shown only when the map has points */
+    justify-content: flex-end;
+    gap: 6px;
+  }
+  .map-clip-btn {
+    border: 1px solid var(--border, #e0ded8);
+    background: var(--surface, #fff);
+    border-radius: 6px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.12);
+    padding: 6px 14px;
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    color: #5a5850;
+    cursor: pointer;
+  }
+  .map-clip-btn.armed { background: #1a1917; color: #fff; border-color: #1a1917; }
+  .map-clip-btn.clip-clear { color: #9a3b3b; display: none; }
+  .clip-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 450;            /* above tiles, below the control buttons */
+    display: none;
+    cursor: crosshair;
+    background: rgba(26,25,23,0.08);
+  }
+  .clip-rect {
+    position: absolute;
+    display: none;
+    border: 1.5px dashed #1a1917;
+    background: rgba(255,255,255,0.18);
+    pointer-events: none;
+  }
+
   /* ── Detail panel ── */
   .detail-bar {
     height: 80px;
@@ -660,6 +699,13 @@
         <button type="button" class="map-mode-btn active" data-mode="pins">Pins</button>
         <button type="button" class="map-mode-btn" data-mode="heat">Heatmap</button>
       </div>
+      <div class="map-clip-control" id="map-clip-control">
+        <button type="button" class="map-clip-btn" id="clip-btn">Clip Location</button>
+        <button type="button" class="map-clip-btn clip-clear" id="clip-clear-btn">Clear Clip ✕</button>
+      </div>
+      <div class="clip-overlay" id="clip-overlay">
+        <div class="clip-rect" id="clip-rect"></div>
+      </div>
       <div id="map"></div>
     </div>
   </div>
@@ -711,6 +757,8 @@ let leafletMap = null;
 let markerLayer = null;
 let heatLayer = null;        // L.layerGroup of per-activity heat layers
 let mapMode = 'pins';        // 'pins' | 'heat'
+let clipBounds = null;       // {south,west,north,east} geo filter from a clip
+let clipRectLayer = null;    // persistent L.rectangle drawn for the active clip
 // Views are rebuilt lazily: only the visible tab is re-rendered on data/filter
 // changes; the others are flagged dirty and rebuilt when their tab is opened.
 // This avoids, e.g., recreating thousands of map markers while on the graph tab.
@@ -856,6 +904,7 @@ function processData(raw) {
   activePhenology = new Set(allData.flatMap(d => d.phenologies));
   activeStages = new Set(allData.map(d => d.stage));
 
+  clearClip(false);          // a fresh sheet may not match an old clip box
   rebuildActivityColors();
   const allActivities = [...new Set(allData.flatMap(d => d.activities))];
   activeActivities = new Set(allActivities);
@@ -1021,8 +1070,17 @@ function filteredData() {
     activePlants.has(d.plant) &&
     d.phenologies.some(p => activePhenology.has(p)) &&
     activeStages.has(d.stage) &&
-    d.activities.some(a => activeActivities.has(a))
+    d.activities.some(a => activeActivities.has(a)) &&
+    inClip(d)
   );
+}
+
+// When a location clip is active, keep only geolocated points inside the box.
+function inClip(d) {
+  if (!clipBounds) return true;
+  if (d.lat == null || d.lon == null) return false;
+  return d.lat >= clipBounds.south && d.lat <= clipBounds.north &&
+         d.lon >= clipBounds.west  && d.lon <= clipBounds.east;
 }
 
 // ═══════════════════════════════════════════════════
@@ -1342,7 +1400,11 @@ function buildMap() {
     : 'Upload a spreadsheet to see locations';
   document.getElementById('map').style.display = pts.length ? 'block' : 'none';
   document.getElementById('map-mode-toggle').style.display = pts.length ? 'flex' : 'none';
-  if (!pts.length) return;
+  // The clip control stays available whenever there are points to clip, or a
+  // clip is already active (so it can be cleared even if it matches nothing).
+  document.getElementById('map-clip-control').style.display =
+    (pts.length || clipBounds) ? 'flex' : 'none';
+  if (!pts.length && !clipBounds) return;
 
   if (!leafletMap) {
     // preferCanvas renders vector markers to a single <canvas> instead of one
@@ -1407,12 +1469,26 @@ function buildMap() {
 
   applyMapMode();
 
-  let lat0=Infinity, lat1=-Infinity, lon0=Infinity, lon1=-Infinity;
-  for (const d of pts) {
-    if (d.lat<lat0) lat0=d.lat; if (d.lat>lat1) lat1=d.lat;
-    if (d.lon<lon0) lon0=d.lon; if (d.lon>lon1) lon1=d.lon;
+  // Persistent highlight of the active clip box (survives pan/zoom).
+  if (clipRectLayer) { clipRectLayer.remove(); clipRectLayer = null; }
+  if (clipBounds) {
+    clipRectLayer = L.rectangle(
+      [[clipBounds.south, clipBounds.west], [clipBounds.north, clipBounds.east]],
+      { color: '#1a1917', weight: 1.5, dashArray: '5 4', fill: false, interactive: false }
+    ).addTo(leafletMap);
   }
-  leafletMap.fitBounds([[lat0-0.02, lon0-0.02], [lat1+0.02, lon1+0.02]]);
+
+  // Frame the view: to the clip box if one is set, otherwise to the points.
+  if (clipBounds) {
+    leafletMap.fitBounds([[clipBounds.south, clipBounds.west], [clipBounds.north, clipBounds.east]]);
+  } else if (pts.length) {
+    let lat0=Infinity, lat1=-Infinity, lon0=Infinity, lon1=-Infinity;
+    for (const d of pts) {
+      if (d.lat<lat0) lat0=d.lat; if (d.lat>lat1) lat1=d.lat;
+      if (d.lon<lon0) lon0=d.lon; if (d.lon>lon1) lon1=d.lon;
+    }
+    leafletMap.fitBounds([[lat0-0.02, lon0-0.02], [lat1+0.02, lon1+0.02]]);
+  }
 }
 
 // Show whichever layer matches the current mode without rebuilding the data.
@@ -1436,6 +1512,118 @@ document.querySelectorAll('.map-mode-btn').forEach(btn => {
     applyMapMode();
   });
 });
+
+// ═══════════════════════════════════════════════════
+// CLIP LOCATION — drag a rectangle on the geo map to constrain every view
+// (especially the interaction network) to observations inside that box.
+// ═══════════════════════════════════════════════════
+let clipDrawing = false;     // true while the user is dragging out a box
+let clipStart = null;        // {x,y} client coords of the drag origin
+
+function enterClipMode() {
+  if (!leafletMap) return;
+  clipDrawing = true;
+  document.getElementById('clip-overlay').style.display = 'block';
+  document.getElementById('clip-btn').classList.add('armed');
+  document.getElementById('clip-btn').textContent = 'Drag a box… (Esc)';
+  leafletMap.dragging.disable();
+  leafletMap.doubleClickZoom.disable();
+  leafletMap.scrollWheelZoom.disable();
+}
+
+function exitClipMode() {
+  clipDrawing = false;
+  clipStart = null;
+  document.getElementById('clip-overlay').style.display = 'none';
+  document.getElementById('clip-rect').style.display = 'none';
+  document.getElementById('clip-btn').classList.remove('armed');
+  document.getElementById('clip-btn').textContent = 'Clip Location';
+  if (leafletMap) {
+    leafletMap.dragging.enable();
+    leafletMap.doubleClickZoom.enable();
+    leafletMap.scrollWheelZoom.enable();
+  }
+}
+
+// Position the dashed preview rectangle from two client-space points.
+function drawClipRect(a, b) {
+  const panel = document.getElementById('clip-overlay').getBoundingClientRect();
+  const rect = document.getElementById('clip-rect');
+  rect.style.display = 'block';
+  rect.style.left   = (Math.min(a.x, b.x) - panel.left) + 'px';
+  rect.style.top    = (Math.min(a.y, b.y) - panel.top)  + 'px';
+  rect.style.width  = Math.abs(a.x - b.x) + 'px';
+  rect.style.height = Math.abs(a.y - b.y) + 'px';
+}
+
+function clearClip(rebuild = true) {
+  clipBounds = null;
+  if (clipRectLayer) { clipRectLayer.remove(); clipRectLayer = null; }
+  const clearBtn = document.getElementById('clip-clear-btn');
+  if (clearBtn) clearBtn.style.display = 'none';
+  if (rebuild) {
+    graphDirty = mapDirty = true;
+    rawRendered = false;
+    refreshViews();
+  }
+}
+
+(function setupClip() {
+  const overlay = document.getElementById('clip-overlay');
+  const clipBtn = document.getElementById('clip-btn');
+  const clearBtn = document.getElementById('clip-clear-btn');
+  if (!overlay || !clipBtn) return;
+
+  clipBtn.addEventListener('click', () => {
+    clipDrawing ? exitClipMode() : enterClipMode();
+  });
+  clearBtn.addEventListener('click', () => clearClip(true));
+
+  overlay.addEventListener('pointerdown', e => {
+    if (!clipDrawing) return;
+    clipStart = { x: e.clientX, y: e.clientY };
+    overlay.setPointerCapture(e.pointerId);
+    drawClipRect(clipStart, clipStart);
+  });
+  overlay.addEventListener('pointermove', e => {
+    if (!clipStart) return;
+    drawClipRect(clipStart, { x: e.clientX, y: e.clientY });
+  });
+  overlay.addEventListener('pointerup', e => {
+    if (!clipStart) return;
+    finalizeClip(clipStart, { x: e.clientX, y: e.clientY });
+    clipStart = null;
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && clipDrawing) exitClipMode();
+  });
+})();
+
+function finalizeClip(a, b) {
+  const mapEl = leafletMap.getContainer();
+  const r = mapEl.getBoundingClientRect();
+  const p1 = L.point(a.x - r.left, a.y - r.top);
+  const p2 = L.point(b.x - r.left, b.y - r.top);
+  // Ignore stray clicks / tiny drags.
+  if (Math.abs(p1.x - p2.x) < 6 || Math.abs(p1.y - p2.y) < 6) { exitClipMode(); return; }
+
+  const ll1 = leafletMap.containerPointToLatLng(p1);
+  const ll2 = leafletMap.containerPointToLatLng(p2);
+  clipBounds = {
+    south: Math.min(ll1.lat, ll2.lat),
+    north: Math.max(ll1.lat, ll2.lat),
+    west:  Math.min(ll1.lng, ll2.lng),
+    east:  Math.max(ll1.lng, ll2.lng),
+  };
+  exitClipMode();
+  document.getElementById('clip-clear-btn').style.display = 'block';
+
+  // Rebuild everything against the clip, then jump to the interaction map so
+  // the user immediately sees the network for that location.
+  graphDirty = mapDirty = true;
+  rawRendered = false;
+  document.querySelector('.tab[data-tab="graph"]').click();
+}
 
 // ═══════════════════════════════════════════════════
 // TABS
