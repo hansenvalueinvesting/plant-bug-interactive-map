@@ -1002,7 +1002,7 @@ function buildFilters(groups) {
     aWrap.appendChild(label);
   });
 
-  refreshActivityAvailability();
+  refreshFilterAvailability();
 }
 
 // Build a checkbox filter group of plain text values. getActive/setActive read
@@ -1048,18 +1048,35 @@ function refreshSelectAll(id, childSelector) {
   master.indeterminate = checkedCount > 0 && checkedCount < children.length;
 }
 
-function refreshActivityAvailability() {
-  // Activities present in rows that pass the current group filter
-  const allowed = new Set(
-    allData
-      .filter(d => activeGroups.has(d.group))
-      .flatMap(d => d.activities)
-  );
-  document.querySelectorAll('#activity-filters input[data-activity]').forEach(input => {
-    const a = input.dataset.activity;
-    const empty = !allowed.has(a);
-    input.disabled = empty;
-    input.parentElement.classList.toggle('filter-empty', empty);
+// Each filter dimension: how to read a row's value(s) for that dimension, the
+// predicate that decides whether a row passes the dimension's current
+// selection, and where its checkboxes live in the DOM.
+const FILTER_DIMS = [
+  { key:'group',     wrapId:'group-filters',     values:d=>[d.group],     pred:d=>activeGroups.has(d.group) },
+  { key:'insect',    wrapId:'insect-filters',    values:d=>[d.insect],    pred:d=>activeInsects.has(d.insect) },
+  { key:'plant',     wrapId:'plant-filters',     values:d=>[d.plant],     pred:d=>activePlants.has(d.plant) },
+  { key:'phenology', wrapId:'phenology-filters', values:d=>d.phenologies, pred:d=>d.phenologies.some(p=>activePhenology.has(p)) },
+  { key:'stage',     wrapId:'stage-filters',     values:d=>[d.stage],     pred:d=>activeStages.has(d.stage) },
+  { key:'activity',  wrapId:'activity-filters',  values:d=>d.activities,  pred:d=>d.activities.some(a=>activeActivities.has(a)) },
+];
+
+// Gray out, in every filter group, the options that have no observation once
+// all the OTHER filter groups (and any location clip) are applied. This guides
+// the user toward selections that actually narrow the data. A dimension's own
+// selection is ignored when computing its availability, so toggling a value off
+// never hides its siblings.
+function refreshFilterAvailability() {
+  FILTER_DIMS.forEach(dim => {
+    const allowed = new Set(
+      allData
+        .filter(d => inClip(d) && FILTER_DIMS.every(o => o.key === dim.key || o.pred(d)))
+        .flatMap(dim.values)
+    );
+    document.querySelectorAll(`#${dim.wrapId} input[data-${dim.key}]`).forEach(input => {
+      const empty = !allowed.has(input.dataset[dim.key]);
+      input.disabled = empty;
+      input.parentElement.classList.toggle('filter-empty', empty);
+    });
   });
 }
 
@@ -1663,7 +1680,7 @@ function filteredRawSheet() {
 }
 
 function onFiltersChanged() {
-  refreshActivityAvailability();
+  refreshFilterAvailability();
   refreshSelectAll('group-select-all', '#group-filters input[data-group]');
   refreshSelectAll('insect-select-all', '#insect-filters input[data-insect]');
   refreshSelectAll('plant-select-all', '#plant-filters input[data-plant]');
