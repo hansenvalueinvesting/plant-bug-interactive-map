@@ -590,6 +590,15 @@
       </div>
     </div>
 
+    <div class="sidebar-cat">Time</div>
+
+    <div class="sidebar-section">
+      <details class="filter-details" open>
+        <summary class="sidebar-label">Filter: year</summary>
+        <div class="filter-group" id="year-filters"></div>
+      </details>
+    </div>
+
     <div class="sidebar-cat">Insect</div>
 
     <div class="sidebar-section">
@@ -750,6 +759,7 @@ let activeInsects = new Set();   // arthropod taxon
 let activePlants = new Set();
 let activePhenology = new Set();
 let activeStages = new Set();
+let activeYears = new Set();      // observation year (string), '-' = no date
 let activeActivities = new Set();  // populated from data on load
 let selectedNode = null;
 let simulation = null;
@@ -877,9 +887,11 @@ function processData(raw) {
   resolvedCol = col;
   allData = raw.map(r => {
     const activity = clean(r[col.activity]);
+    const date = parseDate(r[col.date]);
     return {
       url:        r[col.url] || '-',
-      date:       parseDate(r[col.date]),
+      date:       date,
+      year:       date ? String(date.getFullYear()) : '-',
       lat:        parseFloat(r[col.lat]) || null,
       lon:        parseFloat(r[col.lon]) || null,
       plant:      clean(r[col.plant]),
@@ -903,6 +915,7 @@ function processData(raw) {
   activePlants = new Set(allData.map(d => d.plant));
   activePhenology = new Set(allData.flatMap(d => d.phenologies));
   activeStages = new Set(allData.map(d => d.stage));
+  activeYears = new Set(allData.map(d => d.year));
 
   clearClip(false);          // a fresh sheet may not match an old clip box
   rebuildActivityColors();
@@ -954,6 +967,13 @@ function filterSort(a, b) {
   return a.localeCompare(b);
 }
 
+// Years sort newest-first, with '-' (no date) always last.
+function yearSort(a, b) {
+  if (a === '-') return 1;
+  if (b === '-') return -1;
+  return Number(b) - Number(a);
+}
+
 // ═══════════════════════════════════════════════════
 // FILTERS
 // ═══════════════════════════════════════════════════
@@ -977,6 +997,10 @@ function buildFilters(groups) {
   const stages = [...new Set(allData.map(d => d.stage))].sort(filterSort);
   buildCheckFilter('stage-filters', 'stage-select-all', 'stage', stages,
     () => activeStages, s => activeStages = s);
+
+  const years = [...new Set(allData.map(d => d.year))].sort(yearSort);
+  buildCheckFilter('year-filters', 'year-select-all', 'year', years,
+    () => activeYears, s => activeYears = s, 'No date');
 
   // ── Activities ──
   const aWrap = document.getElementById('activity-filters');
@@ -1008,7 +1032,7 @@ function buildFilters(groups) {
 // Build a checkbox filter group of plain text values. getActive/setActive read
 // and replace the backing Set so the "Select all" toggle can swap it wholesale
 // while per-item toggles mutate the current Set.
-function buildCheckFilter(wrapId, allId, attr, values, getActive, setActive) {
+function buildCheckFilter(wrapId, allId, attr, values, getActive, setActive, emptyLabel = 'Unknown') {
   const wrap = document.getElementById(wrapId);
   wrap.innerHTML = '';
   const all = makeSelectAllRow(allId, () => {
@@ -1021,7 +1045,7 @@ function buildCheckFilter(wrapId, allId, attr, values, getActive, setActive) {
   values.forEach(v => {
     const label = document.createElement('label');
     label.className = 'filter-check';
-    label.innerHTML = `<input type="checkbox" checked data-${attr}="${v.replace(/"/g,'&quot;')}"/> ${v === '-' ? 'Unknown' : v}`;
+    label.innerHTML = `<input type="checkbox" checked data-${attr}="${v.replace(/"/g,'&quot;')}"/> ${v === '-' ? emptyLabel : v}`;
     label.querySelector('input').addEventListener('change', function() {
       this.checked ? getActive().add(v) : getActive().delete(v);
       refreshSelectAll(allId, `#${wrapId} input[data-${attr}]`);
@@ -1058,6 +1082,7 @@ const FILTER_DIMS = [
   { key:'phenology', wrapId:'phenology-filters', values:d=>d.phenologies, pred:d=>d.phenologies.some(p=>activePhenology.has(p)) },
   { key:'stage',     wrapId:'stage-filters',     values:d=>[d.stage],     pred:d=>activeStages.has(d.stage) },
   { key:'activity',  wrapId:'activity-filters',  values:d=>d.activities,  pred:d=>d.activities.some(a=>activeActivities.has(a)) },
+  { key:'year',      wrapId:'year-filters',      values:d=>[d.year],      pred:d=>activeYears.has(d.year) },
 ];
 
 // Gray out, in every filter group, the options that have no observation once
@@ -1088,6 +1113,7 @@ function filteredData() {
     d.phenologies.some(p => activePhenology.has(p)) &&
     activeStages.has(d.stage) &&
     d.activities.some(a => activeActivities.has(a)) &&
+    activeYears.has(d.year) &&
     inClip(d)
   );
 }
@@ -1670,12 +1696,14 @@ function filteredRawSheet() {
     const phs = splitMulti(clean(r[resolvedCol.phenology]));
     const st = clean(r[resolvedCol.stage]);
     const acts = splitMulti(clean(r[resolvedCol.activity]));
+    const yr = yearOf(r);
     return activeGroups.has(g) &&
            activeInsects.has(ins) &&
            activePlants.has(p) &&
            phs.some(ph => activePhenology.has(ph)) &&
            activeStages.has(st) &&
-           acts.some(a => activeActivities.has(a));
+           acts.some(a => activeActivities.has(a)) &&
+           activeYears.has(yr);
   });
 }
 
@@ -1687,6 +1715,7 @@ function onFiltersChanged() {
   refreshSelectAll('phenology-select-all', '#phenology-filters input[data-phenology]');
   refreshSelectAll('stage-select-all', '#stage-filters input[data-stage]');
   refreshSelectAll('activity-select-all', '#activity-filters input[data-activity]');
+  refreshSelectAll('year-select-all', '#year-filters input[data-year]');
   if (allData.length) refreshViews();
 }
 
@@ -1754,6 +1783,13 @@ function parseDate(v) {
   if (v === null || v === undefined || v === '-' || v === '') return null;
   const d = new Date(v);
   return isNaN(d) ? null : d;
+}
+
+// Observation year of a raw sheet row as a string ('-' when undated), matching
+// the `year` field computed for allData so raw-table filtering stays in sync.
+function yearOf(r) {
+  const d = parseDate(r[resolvedCol.date]);
+  return d ? String(d.getFullYear()) : '-';
 }
 
 function fmtDate(d) {
