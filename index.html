@@ -1741,9 +1741,11 @@ function buildRawTable() {
   // freeze the page. Filters narrow the set; the notice shows what's hidden.
   const MAX_ROWS = 1000;
   const shown = rows.slice(0, MAX_ROWS);
+  const total = rows.length.toLocaleString();
+  const rowWord = rows.length === 1 ? 'row' : 'rows';
   let html = rows.length > MAX_ROWS
-    ? `<div class="raw-notice">Showing first ${MAX_ROWS.toLocaleString()} of ${rows.length.toLocaleString()} rows. Use the filters to narrow the results.</div>`
-    : '';
+    ? `<div class="raw-notice">Showing first ${MAX_ROWS.toLocaleString()} of ${total} ${rowWord} matching the current filters. Use the filters to narrow the results.</div>`
+    : `<div class="raw-notice">Showing ${total} ${rowWord} matching the current filters.</div>`;
   html += '<table class="raw-table"><thead><tr>';
   for (const c of cols) html += `<th>${escape(c)}</th>`;
   html += '</tr></thead><tbody>';
